@@ -3,13 +3,18 @@ import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
+import { formatDate } from "../utils/date";
+import BpmnDiagram from "../components/BpmnDiagram";
+import { labelizeSheetKey, sortSheetEntries } from "../utils/sheetLabels";
 
 type SheetValue = string | number | boolean | null | SheetValue[] | { [key: string]: SheetValue };
 type SheetData = Record<string, SheetValue>;
 
 type ProcessSheet = {
   id: number;
+  process: number;
   process_name: string;
+  process_bpmn_xml?: string;
   manager_username: string;
   due_date: string;
   status: string;
@@ -38,7 +43,32 @@ function normalizeSheetData(value: Record<string, unknown>): SheetData {
 }
 
 function labelize(value: string) {
-  return value.replace(/_/g, " ");
+  return labelizeSheetKey(value);
+}
+
+function isEmptyValue(value: SheetValue): boolean {
+  if (Array.isArray(value)) {
+    return value.length === 0 || value.every(isEmptyValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value).some(isEmptyValue);
+  }
+  if (typeof value === "boolean") return false;
+  if (typeof value === "number") return Number.isNaN(value);
+  return String(value ?? "").trim() === "";
+}
+
+function collectMissingFields(value: SheetValue, path: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    if (value.length === 0 || value.every(isEmptyValue)) {
+      return [path.map(labelize).join(" / ")];
+    }
+    return value.flatMap((item, index) => collectMissingFields(item, [...path, `${index + 1}`]));
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value).flatMap(([key, nested]) => collectMissingFields(nested, [...path, key]));
+  }
+  return isEmptyValue(value) ? [path.map(labelize).join(" / ")] : [];
 }
 
 function makeEmptyLike(value: SheetValue): SheetValue {
@@ -65,7 +95,7 @@ function renderValue(value: unknown) {
   if (isRecord(value)) {
     return (
       <div className="fiche-grid">
-        {Object.entries(value).map(([key, nested]) => (
+        {sortSheetEntries(Object.entries(value)).map(([key, nested]) => (
           <div key={key} className="fiche-item fiche-item-block">
             <div className="fiche-label">{labelize(key)}</div>
             <div className="fiche-content">{renderValue(nested)}</div>
@@ -128,7 +158,7 @@ function SheetValueEditor({ fieldKey, value, onChange, level = 0 }: SheetValueEd
       <div className={level === 0 ? "sheet-editor-group" : "sheet-editor-subgroup"}>
         <div className="fiche-label">{label}</div>
         <div className="sheet-editor-grid">
-          {Object.entries(value).map(([key, nested]) => (
+          {sortSheetEntries(Object.entries(value)).map(([key, nested]) => (
             <SheetValueEditor
               key={key}
               fieldKey={key}
@@ -182,6 +212,7 @@ function ProcessSheetDetailPage() {
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SheetData>({});
+  const [missingFields, setMissingFields] = useState<string[]>([]);
 
   useEffect(() => {
     if (data?.sheet_data) {
@@ -191,6 +222,14 @@ function ProcessSheetDetailPage() {
 
   const saveSheet = async (status: "draft" | "submitted") => {
     if (!data) return;
+    if (status === "submitted") {
+      const missing = collectMissingFields(draft);
+      if (missing.length) {
+        setMissingFields(missing);
+        return;
+      }
+    }
+    setMissingFields([]);
     await mutate("patch", `/managed-process-sheets/${data.id}/`, {
       sheet_data: draft,
       status,
@@ -217,7 +256,7 @@ function ProcessSheetDetailPage() {
 
       <div className="card fiche-meta-bar">
         <div><strong>Gestionnaire:</strong> {data?.manager_username ?? "-"}</div>
-        <div><strong>Échéance:</strong> {data?.due_date ? new Date(data.due_date).toLocaleDateString() : "-"}</div>
+        <div><strong>Échéance:</strong> {formatDate(data?.due_date, "-")}</div>
         {auth.role === "gestionnaire" && data && (
           <button className="tag" onClick={() => setEditing((v) => !v)}>{editing ? "Annuler" : "Modifier la fiche"}</button>
         )}
@@ -229,7 +268,7 @@ function ProcessSheetDetailPage() {
 
       {data?.sheet_data && (
         <div className="card">
-          {Object.entries(data.sheet_data).map(([section, value]) => (
+          {sortSheetEntries(Object.entries(data.sheet_data)).map(([section, value]) => (
             <section key={section} className="fiche-section">
               <h3 className="section-title">{labelize(section)}</h3>
               {editing && auth.role === "gestionnaire" ? (
@@ -249,7 +288,27 @@ function ProcessSheetDetailPage() {
               <button className="btn-primary" onClick={() => saveSheet("submitted")} disabled={saving}>Soumettre la fiche</button>
             </div>
           )}
+          {missingFields.length > 0 && (
+            <div className="sheet-validation-card">
+              <strong>Champs obligatoires à compléter avant soumission</strong>
+              <ul>
+                {missingFields.slice(0, 12).map((field) => <li key={field}>{field}</li>)}
+              </ul>
+              {missingFields.length > 12 && <div>+ {missingFields.length - 12} autres champs.</div>}
+            </div>
+          )}
           {saveError && <div style={{ color: "#b91c1c", marginTop: 12 }}>{saveError}</div>}
+        </div>
+      )}
+
+      {data?.process && (
+        <div className="card">
+          <BpmnDiagram
+            processId={data.process}
+            xml={data.process_bpmn_xml}
+            editable={auth.role === "gestionnaire"}
+            onSaved={refetch}
+          />
         </div>
       )}
     </div>

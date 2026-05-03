@@ -6,7 +6,10 @@ import NonConformityEditModal from "../components/NonConformityEditModal";
 type NC = {
   id: number;
   reference: string;
-  process: { id: number; name: string };
+  process: number;
+  process_name: string;
+  criterion: number | null;
+  criterion_title: string;
   severity: string;
   status: string;
   detected_at: string;
@@ -29,24 +32,22 @@ function NonConformitiesPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Référence</th>
               <th>Processus</th>
+              <th>Critère</th>
               <th>Sévérité</th>
-              <th>Statut</th>
-              <th>Détectée le</th>
+              <th>Description</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {ncs.map((nc) => (
               <tr key={nc.id}>
-                <td>{nc.reference}</td>
-                <td>{nc.process?.name ?? ""}</td>
+                <td>{nc.process_name || "-"}</td>
+                <td>{nc.criterion_title || "-"}</td>
                 <td>
                   <span className={`badge ${nc.severity}`}>{nc.severity}</span>
                 </td>
-                <td>{nc.status}</td>
-                <td>{new Date(nc.detected_at).toLocaleDateString()}</td>
+                <td className="table-copy-cell">{nc.description}</td>
                 <td className="table-actions">
                   <button className="tag" onClick={() => setEditing(nc)}>
                     Éditer

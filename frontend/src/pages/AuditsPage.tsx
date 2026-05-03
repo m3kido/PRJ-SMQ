@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
 import { useAuth } from "../context/AuthContext";
+import AppDateInput from "../components/AppDateInput";
+import { formatDate } from "../utils/date";
 
 type AuditAssignment = {
   id: number;
@@ -63,7 +65,7 @@ function AuditsPage() {
                 <td>{assignment.auditor_username}</td>
                 <td>{assignment.process_department_name ?? ""}</td>
                 <td>{assignment.status}</td>
-                <td>{new Date(assignment.due_date).toLocaleDateString()}</td>
+                <td>{formatDate(assignment.due_date)}</td>
                 <td className="table-actions">
                   <Link className="tag" to={`/audit-execution/${assignment.id}`}>
                     {assignment.status === "closed" ? "Consulter" : "Lancer l'audit"}
@@ -92,7 +94,7 @@ function AuditsPage() {
               <option value="">Choisir un auditeur</option>
               {(users ?? []).filter((user) => user.role.startsWith("auditeur_")).map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
             </select>
-            <input type="date" value={assignmentForm.due_date} onChange={(e) => setAssignmentForm({ ...assignmentForm, due_date: e.target.value })} style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }} />
+            <AppDateInput value={assignmentForm.due_date} onChange={(due_date) => setAssignmentForm({ ...assignmentForm, due_date })} style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }} />
             {assignError && <div style={{ color: "#b91c1c" }}>{assignError}</div>}
             <button className="btn-primary" type="submit" disabled={assigning}>{assigning ? "Affectation..." : "Assigner l'auditeur"}</button>
           </form>

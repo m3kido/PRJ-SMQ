@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
+import { formatDate } from "../utils/date";
 
 type ManagedSheet = {
   id: number;
@@ -63,7 +64,7 @@ function GestionnaireWorkspacePage() {
             {(data ?? []).map((item) => (
               <tr key={item.id}>
                 <td>{item.process_name}</td>
-                <td>{new Date(item.due_date).toLocaleDateString()}</td>
+                <td>{formatDate(item.due_date)}</td>
                 <td>{item.status}</td>
                 <td>
                   <Link className="tag" to={`/process-sheets/${item.id}`}>
@@ -115,7 +116,7 @@ function GestionnaireWorkspacePage() {
               <tr key={item.id}>
                 <td>{`AUD-${item.audit}`}</td>
                 <td>{item.process_name}</td>
-                <td>{new Date(item.due_date).toLocaleDateString()}</td>
+                <td>{formatDate(item.due_date)}</td>
                 <td>{item.status}</td>
                 <td>
                   <Link className="tag" to={`/audit-reports/${item.id}`}>

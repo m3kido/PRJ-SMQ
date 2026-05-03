@@ -26,6 +26,7 @@ class Process(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="owned_processes")
     department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name="processes")
     description = models.TextField(blank=True)
+    bpmn_xml = models.TextField(blank=True)
     completeness = models.PositiveSmallIntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -90,10 +91,21 @@ class NonConformity(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["process", "criterion"],
+                condition=models.Q(criterion__isnull=False),
+                name="unique_nonconformity_process_criterion",
+            )
+        ]
+
 
 class CorrectiveAction(models.Model):
-    non_conformity = models.ForeignKey(NonConformity, on_delete=models.CASCADE, related_name="actions")
+    process = models.ForeignKey(Process, on_delete=models.PROTECT, related_name="corrective_actions", null=True, blank=True)
+    non_conformity = models.ForeignKey(NonConformity, on_delete=models.SET_NULL, related_name="actions", null=True, blank=True)
     title = models.CharField(max_length=255)
+    body = models.TextField(blank=True)
     assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="assigned_actions")
     due_date = models.DateField(null=True, blank=True)
     completed = models.BooleanField(default=False)
@@ -204,7 +216,7 @@ class IsoCriterion(models.Model):
     code = models.CharField(max_length=64, unique=True)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    expected_evidence = models.TextField(blank=True)
+    process_types = models.JSONField(default=list, blank=True)
     order = models.PositiveIntegerField(default=0)
 
     class Meta:

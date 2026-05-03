@@ -13,7 +13,6 @@ import EvaluationScalesPage from "./pages/EvaluationScalesPage";
 import AdministrationPage from "./pages/AdministrationPage";
 import ProcessesPage from "./pages/ProcessesPage";
 import AuditsPage from "./pages/AuditsPage";
-import DocumentsPage from "./pages/DocumentsPage";
 import NonConformitiesPage from "./pages/NonConformitiesPage";
 import ActionsPage from "./pages/ActionsPage";
 import NotFoundPage from "./pages/NotFoundPage";
@@ -49,7 +48,6 @@ function App() {
                 <Route path="/criteria" element={<CriteriaManagementPage />} />
                 <Route path="/evaluation-scales" element={<EvaluationScalesPage />} />
                 <Route path="/administration" element={<AdministrationPage />} />
-                <Route path="/documents" element={<DocumentsPage />} />
                 <Route path="/processes/:id" element={<ProcessDetailPage />} />
                 <Route path="/process-sheets/:id" element={<ProcessSheetDetailPage />} />
                 <Route path="/audit-execution/:id" element={<AuditExecutionPage />} />

@@ -15,7 +15,6 @@ from .models import (
     Audit,
     NonConformity,
     CorrectiveAction,
-    Document,
     Notification,
     Kpi,
     ProcessSheetTemplate,
@@ -37,7 +36,6 @@ from .serializers import (
     AuditSerializer,
     NonConformitySerializer,
     CorrectiveActionSerializer,
-    DocumentSerializer,
     NotificationSerializer,
     KpiSerializer,
     UserProfileSerializer,
@@ -58,6 +56,17 @@ from .serializers import (
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+
+
+def build_auto_nonconformity_reference(process_id, criterion_id):
+    base_reference = f"AUTO-NC-P{process_id}-C{criterion_id}"
+    if not NonConformity.objects.filter(reference=base_reference).exists():
+        return base_reference
+
+    suffix = 2
+    while NonConformity.objects.filter(reference=f"{base_reference}-{suffix}").exists():
+        suffix += 1
+    return f"{base_reference}-{suffix}"
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):
@@ -114,15 +123,9 @@ class NonConformityViewSet(viewsets.ModelViewSet):
 
 
 class CorrectiveActionViewSet(viewsets.ModelViewSet):
-    queryset = CorrectiveAction.objects.all().select_related("non_conformity", "assignee")
+    queryset = CorrectiveAction.objects.all().select_related("process", "process__owner", "non_conformity", "assignee")
     serializer_class = CorrectiveActionSerializer
     permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | ReadOnly)]
-
-
-class DocumentViewSet(viewsets.ModelViewSet):
-    queryset = Document.objects.all().select_related("owner", "related_process")
-    serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsGestionnaire | ReadOnly)]
 
 
 class NotificationViewSet(viewsets.ModelViewSet):
@@ -255,42 +258,49 @@ class AuditAssignmentViewSet(viewsets.ModelViewSet):
                 )
                 for item in assessments.select_related("criterion"):
                     criterion_level = match_level(item.conformity_rate or Decimal("0"))
-                    nc, created = NonConformity.objects.get_or_create(
-                        reference=f"AUTO-NC-P{assignment.process_id}-C{item.criterion_id}",
-                        defaults={
-                            "process": assignment.process,
-                            "audit": assignment.audit,
-                            "criterion": item.criterion,
-                            "severity": severity_for_level(criterion_level),
-                            "status": "ouverte",
-                            "description": (
-                                f"Critère {item.criterion.code} - {item.criterion.title} non conforme à "
-                                f"{item.conformity_rate}% lors de l'audit AUD-{assignment.audit_id}."
-                            ),
-                            "detected_at": timezone.localdate(),
-                        },
+                    is_conforming = bool(
+                        criterion_level and criterion_level.conformity_level.lower() == "conforme"
                     )
-                    nc.process = assignment.process
-                    nc.audit = assignment.audit
-                    nc.criterion = item.criterion
-                    nc.detected_at = timezone.localdate()
-                    if criterion_level and criterion_level.conformity_level.lower() == "conforme":
-                        if not created:
+                    nc = NonConformity.objects.filter(
+                        process=assignment.process,
+                        criterion=item.criterion,
+                    ).order_by("-updated_at", "-created_at").first()
+
+                    if is_conforming:
+                        if nc:
+                            nc.audit = assignment.audit
                             nc.status = "resolue"
                             nc.severity = "mineure"
                             nc.description = (
                                 f"Critère {item.criterion.code} - {item.criterion.title} redevenu conforme "
                                 f"({item.conformity_rate}%) lors de l'audit AUD-{assignment.audit_id}."
                             )
-                            nc.save()
+                            nc.detected_at = timezone.localdate()
+                            nc.save(update_fields=["audit", "status", "severity", "description", "detected_at", "updated_at"])
+                        continue
+
+                    description = (
+                        f"Critère {item.criterion.code} - {item.criterion.title} non conforme à "
+                        f"{item.conformity_rate}% lors de l'audit AUD-{assignment.audit_id}."
+                    )
+                    if nc is None:
+                        nc = NonConformity.objects.create(
+                            reference=build_auto_nonconformity_reference(assignment.process_id, item.criterion_id),
+                            process=assignment.process,
+                            audit=assignment.audit,
+                            criterion=item.criterion,
+                            severity=severity_for_level(criterion_level),
+                            status="ouverte",
+                            description=description,
+                            detected_at=timezone.localdate(),
+                        )
                     else:
+                        nc.audit = assignment.audit
                         nc.status = "ouverte"
                         nc.severity = severity_for_level(criterion_level)
-                        nc.description = (
-                            f"Critère {item.criterion.code} - {item.criterion.title} non conforme à "
-                            f"{item.conformity_rate}% lors de l'audit AUD-{assignment.audit_id}."
-                        )
-                        nc.save()
+                        nc.description = description
+                        nc.detected_at = timezone.localdate()
+                        nc.save(update_fields=["audit", "status", "severity", "description", "detected_at", "updated_at"])
 
             assignment.audit.status = "clos"
             assignment.audit.end_date = timezone.localdate()
@@ -398,15 +408,17 @@ class AuditEvidenceViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
+        defaults = {
+            "description": validated.get("description", ""),
+            "url": validated.get("url", ""),
+            "created_by": request.user,
+        }
+        if validated.get("file"):
+            defaults["file"] = validated["file"]
         instance, _ = AuditEvidence.objects.update_or_create(
             assessment=validated["assessment"],
             title=validated.get("title") or "Preuve",
-            defaults={
-                "description": validated.get("description", ""),
-                "file": validated.get("file"),
-                "url": validated.get("url", ""),
-                "created_by": validated.get("created_by") or request.user,
-            },
+            defaults=defaults,
         )
         return Response(self.get_serializer(instance).data, status=status.HTTP_200_OK)
 

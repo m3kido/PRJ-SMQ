@@ -1,7 +1,7 @@
 const urgent = [
-  { ref: "NC-2024-001", process: "Production (Ligne B)", date: "14 Mars 2024", severity: "critique" },
-  { ref: "NC-2024-005", process: "Ressources Humaines", date: "12 Mars 2024", severity: "majeure" },
-  { ref: "NC-2023-089", process: "Maintenance SI", date: "10 Mars 2024", severity: "mineure" },
+  { ref: "NC-2024-001", process: "Production (Ligne B)", date: "14/03/2024", severity: "critique" },
+  { ref: "NC-2024-005", process: "Ressources Humaines", date: "12/03/2024", severity: "majeure" },
+  { ref: "NC-2023-089", process: "Maintenance SI", date: "10/03/2024", severity: "mineure" },
 ];
 
 const activity = [

@@ -7,7 +7,6 @@ from .models import (
     Audit,
     NonConformity,
     CorrectiveAction,
-    Document,
     Notification,
     Kpi,
     UserProfile,
@@ -20,7 +19,6 @@ admin.site.register(ProcessDocument)
 admin.site.register(Audit)
 admin.site.register(NonConformity)
 admin.site.register(CorrectiveAction)
-admin.site.register(Document)
 admin.site.register(Notification)
 admin.site.register(Kpi)
 admin.site.register(UserProfile)

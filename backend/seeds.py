@@ -7,7 +7,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 django.setup()
 
 from django.contrib.auth import get_user_model  # noqa: E402
-from smq.iso9001_catalog import ISO_9001_CRITERIA_CATALOG  # noqa: E402
+from smq.iso9001_catalog import ISO_9001_CRITERIA_CATALOG, get_process_type_tags  # noqa: E402
 from smq.models import (  # noqa: E402
     Department,
     UserProfile,
@@ -65,70 +65,83 @@ def main():
         },
     )
 
-    template_defaults = {
-        "description": "Fiche processus détaillée pour la soutenance de thèse",
-        "structure": {
-            "general_information": {
-                "pilote": "DPGR",
-                "designation": "Processus de Soutenance de Thèse – ESI",
-                "objectif": "Organiser et encadrer la soutenance de thèse de la soumission au dossier jusqu'à l'archivage final.",
-                "type_processus": "Réalisation",
+    process_sheet_structure = {
+        "informations_generales": {
+            "pilote_processus": "",
+            "designation_processus": "",
+            "objectif_processus": "",
+            "structures_concernees": [""],
+            "type_processus": "",
+        },
+        "elements_cles": {
+            "delai_global": "",
+            "cout_estime": "",
+            "entrees": [{"element_declencheur_ou_donnee": "", "processus_source": ""}],
+            "sorties": [{"livrable_ou_service": "", "processus_destinataire": ""}],
+            "clients": "",
+            "effectifs_impliques": "",
+            "competences_cles": [""],
+            "kpi": [{"indicateur": "", "cible": "", "frequence_mesure": ""}],
+        },
+        "contexte_et_environnement": {
+            "processus_voisins": {"amont": [""], "aval": [""]},
+            "enjeux": [""],
+            "moyens_alloues": [""],
+            "contraintes": {
+                "reglementaires": [""],
+                "temporelles": [""],
+                "techniques": [""],
             },
-            "elements_cles": {
-                "delai_global": "4 à 8 mois",
-                "cout_estime": "Aucun coût direct pour le doctorant",
-                "kpi": [
-                    "Taux de conformité des dossiers au 1er dépôt",
-                    "Respect délai évaluation experts (45j)",
-                    "Respect délai rapports jury (45j)",
-                    "Délai moyen global dépôt → soutenance",
-                ],
-            },
-            "context": {
-                "enjeux": [
-                    "Qualité scientifique",
-                    "Conformité réglementaire",
-                    "Traçabilité ISO 9001",
-                ],
-                "risques": [
-                    "Délai dépassé 45j experts/jury",
-                    "Dossier incomplet au dépôt",
-                    "Plagiat détecté",
-                ],
-            },
-            "documented_information": {
-                "references": [
-                    "Arrêtés ministériels 2022",
-                    "Grille de recevabilité 180 points",
-                    "Guide doctorant procédure soutenance",
-                ],
-                "records": [
-                    "Dossier complet doctorant",
-                    "PV CFD",
-                    "PV Conseil Scientifique",
-                    "Rapports experts",
-                ],
-            },
-            "workflow": {
-                "steps": [
-                    "Préparation du dossier de soutenance",
-                    "Évaluation par le CFD",
-                    "Décision du Conseil Scientifique",
-                    "Expertise externe",
-                    "Constitution du jury",
-                    "Transmission des documents au jury",
-                    "Réception des réserves et décision finale",
-                    "Soutenance",
-                    "Levée des réserves et dépôt final",
-                    "Clôture et archivage",
-                ]
+            "risques": [""],
+        },
+        "informations_documentees": {
+            "documents_de_reference": [
+                {"identification_description": "", "format_support": "", "revue_approbation": ""}
+            ],
+            "enregistrements_preuves": [
+                {"identification_description": "", "format_support": "", "revue_approbation": ""}
+            ],
+        },
+        "dysfonctionnements_majeurs_connus": {
+            "descriptions": [""],
+            "consequences": [""],
+            "causes": [""],
+            "ameliorations": {
+                "court_terme": [""],
+                "moyen_terme": [""],
+                "long_terme": [""],
             },
         },
+        "deroulement_et_modelisation": {
+            "taches_chronologiques": [
+                {"etape": "", "acteur": "", "entrees": "", "actions": "", "sorties": ""}
+            ],
+            "cartographie": {
+                "swimlanes_acteurs": "",
+                "evenements_timers": "",
+                "passerelles_decision": "",
+                "flux_messages": "",
+            },
+        },
+        "validation": {
+            "redacteur": "",
+            "verificateur": "",
+            "approbateur": "",
+            "assistant": "",
+        },
+    }
+    template_defaults = {
+        "description": "Fiche processus structurée pour pilotage, audit et traçabilité ISO 9001.",
+        "structure": process_sheet_structure,
     }
     template, _ = ProcessSheetTemplate.objects.get_or_create(
         code="soutenance-these-esi",
         defaults={"name": "Fiche Processus Soutenance de Thèse", **template_defaults},
     )
+    if template.structure != process_sheet_structure:
+        template.description = template_defaults["description"]
+        template.structure = process_sheet_structure
+        template.save(update_fields=["description", "structure", "updated_at"])
 
     ManagedProcessSheet.objects.get_or_create(
         process=process,
@@ -211,16 +224,19 @@ def main():
             )
             clause_lookup[section["reference"]] = clause
             for criterion_order, criterion in enumerate(section["criteria"], start=1):
-                IsoCriterion.objects.get_or_create(
+                criterion_obj, _ = IsoCriterion.objects.get_or_create(
                     code=criterion["code"],
                     defaults={
                         "clause": clause,
                         "title": criterion["title"],
                         "description": article["article"],
-                        "expected_evidence": "Choix de véracité, preuve et commentaire à renseigner lors de l'audit.",
+                        "process_types": get_process_type_tags(section["reference"]),
                         "order": criterion_order,
                     },
                 )
+                if not criterion_obj.process_types:
+                    criterion_obj.process_types = get_process_type_tags(section["reference"])
+                    criterion_obj.save(update_fields=["process_types"])
             section_order += 1
 
     audit, _ = Audit.objects.get_or_create(

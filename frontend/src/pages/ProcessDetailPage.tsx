@@ -1,12 +1,15 @@
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useFetch } from "../hooks/useFetch";
+import BpmnDiagram from "../components/BpmnDiagram";
+import { labelizeSheetKey, sortSheetEntries } from "../utils/sheetLabels";
 
 type Process = {
   id: number;
   name: string;
   type: string;
   description: string;
+  bpmn_xml?: string;
   completeness: number;
   department_name?: string;
   owner_username?: string;
@@ -32,16 +35,16 @@ function renderBlock(value: unknown) {
   if (Array.isArray(value)) {
     return (
       <ul className="fiche-list">
-        {value.map((item, idx) => <li key={idx}>{typeof item === "object" ? JSON.stringify(item) : String(item)}</li>)}
+        {value.map((item, idx) => <li key={idx}>{typeof item === "object" && item ? renderBlock(item) : String(item)}</li>)}
       </ul>
     );
   }
   if (value && typeof value === "object") {
     return (
       <div className="fiche-grid">
-        {Object.entries(value as Record<string, unknown>).map(([key, nested]) => (
+        {sortSheetEntries(Object.entries(value as Record<string, unknown>)).map(([key, nested]) => (
           <div key={key} className="fiche-item fiche-item-block">
-            <div className="fiche-label">{key.replace(/_/g, " ")}</div>
+            <div className="fiche-label">{labelizeSheetKey(key)}</div>
             {renderBlock(nested)}
           </div>
         ))}
@@ -97,12 +100,22 @@ function ProcessDetailPage() {
       {sheet?.sheet_data && (
         <div className="card">
           <h3 className="section-title">Fiche processus</h3>
-          {Object.entries(sheet.sheet_data).map(([section, value]) => (
+          {sortSheetEntries(Object.entries(sheet.sheet_data)).map(([section, value]) => (
             <section key={section} className="fiche-section">
-              <h3 className="section-title">{section.replace(/_/g, " ")}</h3>
+              <h3 className="section-title">{labelizeSheetKey(section)}</h3>
               {renderBlock(value)}
             </section>
           ))}
+        </div>
+      )}
+
+      {process && (
+        <div className="card">
+          <BpmnDiagram
+            processId={process.id}
+            xml={process.bpmn_xml}
+            editable={auth.role === "gestionnaire"}
+          />
         </div>
       )}
     </div>

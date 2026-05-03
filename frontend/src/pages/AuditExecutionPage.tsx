@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
+import { formatDate } from "../utils/date";
 
 type Assignment = {
   id: number;
   audit: number;
   process: number;
   process_name: string;
+  process_type?: string;
   due_date: string;
   status: string;
 };
@@ -16,7 +18,7 @@ type Clause = {
   id: number;
   reference: string;
   title: string;
-  criteria: { id: number; code: string; title: string }[];
+  criteria: { id: number; code: string; title: string; process_types?: string[] }[];
 };
 
 type AssessmentMap = Record<string, { conformity_rate: string; comment: string; proof: string; proofFile?: File | null }>;
@@ -26,7 +28,7 @@ type Assessment = {
   criterion: number;
   conformity_rate: string | null;
   comment: string;
-  proofs?: { description: string }[];
+  proofs?: { description: string; file?: string; title?: string }[];
 };
 
 type ComputedResult = {
@@ -49,13 +51,24 @@ function sanitizeRateInput(value: string) {
   return String(parsed);
 }
 
+function criterionMatchesProcessType(criterion: Clause["criteria"][number], processType?: string) {
+  return !processType || !criterion.process_types?.length || criterion.process_types.includes(processType);
+}
+
+function processTypeLabel(value?: string) {
+  if (value === "operationnel") return "Opérationnel";
+  if (value === "support") return "Support";
+  if (value === "management") return "Management";
+  return value ?? "-";
+}
+
 function AuditExecutionPage() {
   const { id } = useParams();
   const { data: assignment, loading, refetch: refetchAssignment } = useFetch<Assignment>(`/audit-assignments/${id}/`, [id]);
-  const { data: clauses } = useFetch<Clause[]>("/iso-clauses/");
-  const { data: currentAssessments } = useFetch<Assessment[]>(id ? `/audit-criterion-assessments/?assignment=${id}` : "/audit-criterion-assessments/", [id]);
+  const { data: clauses, loading: clausesLoading } = useFetch<Clause[]>("/iso-clauses/");
+  const { data: currentAssessments } = useFetch<Assessment[]>(id ? `/audit-criterion-assessments/?assignment=${id}` : "/audit-criterion-assessments/?assignment=0", [id]);
   const { data: latestAssessments } = useFetch<Assessment[]>(
-    assignment?.process ? `/audit-criterion-assessments/?latest_for_process=${assignment.process}` : "/audit-criterion-assessments/",
+    assignment?.process ? `/audit-criterion-assessments/?latest_for_process=${assignment.process}` : "/audit-criterion-assessments/?assignment=0",
     [assignment?.process]
   );
   const { data: computedResults, refetch: refetchComputedResults } = useFetch<ComputedResult[]>("/audit-computed-results/");
@@ -70,14 +83,28 @@ function AuditExecutionPage() {
     [clauses]
   );
 
+  const auditClauses = useMemo(
+    () => sortedClauses
+      .map((clause) => ({
+        ...clause,
+        criteria: [...clause.criteria]
+          .filter((criterion) => criterionMatchesProcessType(criterion, assignment?.process_type))
+          .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })),
+      }))
+      .filter((clause) => clause.criteria.length > 0),
+    [assignment?.process_type, sortedClauses]
+  );
+
   const allCriteria = useMemo(
-    () => sortedClauses.flatMap((clause) => [...clause.criteria]
-      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
-      .map((criterion) => ({ ...criterion, clause: clause.reference }))),
-    [sortedClauses]
+    () => auditClauses.flatMap((clause) => clause.criteria.map((criterion) => ({ ...criterion, clause: clause.reference }))),
+    [auditClauses]
   );
 
   const computedResult = (computedResults ?? []).find((item) => String(item.assignment) === String(id));
+  const filledCriteriaCount = allCriteria.filter((criterion) => {
+    const item = values[String(criterion.id)];
+    return item?.conformity_rate || item?.comment || item?.proof || item?.proofFile;
+  }).length;
 
   useEffect(() => {
     valuesRef.current = values;
@@ -221,11 +248,21 @@ function AuditExecutionPage() {
         <div>
           <div className="eyebrow">Exécution d'audit</div>
           <h1 className="dashboard-title">{assignment?.process_name ?? "Audit"}</h1>
-          <p className="dashboard-copy">Les valeurs sont sauvegardées automatiquement pendant la saisie. Vous pouvez quitter la page et reprendre plus tard.</p>
+          <p className="dashboard-copy">Les valeurs sont sauvegardées automatiquement pendant la saisie. Les preuves et commentaires restent attachés à chaque critère.</p>
         </div>
-        <div className="hero-kpi">
-          <span className="hero-kpi-label">Échéance</span>
-          <strong>{assignment?.due_date ? new Date(assignment.due_date).toLocaleDateString() : "-"}</strong>
+        <div className="audit-hero-kpis">
+          <div className="hero-kpi">
+            <span className="hero-kpi-label">Type</span>
+            <strong>{processTypeLabel(assignment?.process_type)}</strong>
+          </div>
+          <div className="hero-kpi">
+            <span className="hero-kpi-label">Échéance</span>
+            <strong>{formatDate(assignment?.due_date, "-")}</strong>
+          </div>
+          <div className="hero-kpi">
+            <span className="hero-kpi-label">Saisie</span>
+            <strong>{filledCriteriaCount}/{allCriteria.length}</strong>
+          </div>
         </div>
       </section>
 
@@ -250,40 +287,70 @@ function AuditExecutionPage() {
         </div>
       ) : null}
 
-      {sortedClauses.map((clause) => (
+      {!loading && !clausesLoading && assignment && auditClauses.length === 0 && (
+        <div className="card muted">Aucun critère n'est taggé pour ce type de processus.</div>
+      )}
+
+      {auditClauses.map((clause) => (
         <div key={clause.id} className="card fiche-section audit-criterion-card">
           <h3 className="section-title">{clause.reference} — {clause.title}</h3>
           <div className="fiche-grid audit-criteria-grid">
-            {[...clause.criteria].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })).map((criterion) => (
+            {clause.criteria.map((criterion) => (
               <div key={criterion.id} className="fiche-item fiche-item-block audit-criterion-item">
-                <div className="fiche-label">{criterion.code}</div>
-                <div className="fiche-text audit-criterion-title">{criterion.title}</div>
+                <div className="audit-criterion-top">
+                  <div>
+                    <div className="fiche-label">{criterion.code}</div>
+                    <div className="fiche-text audit-criterion-title">{criterion.title}</div>
+                  </div>
+                  <span className="audit-rate-chip">
+                    {values[String(criterion.id)]?.conformity_rate || "-"}%
+                  </span>
+                </div>
                 <div className="audit-input-stack">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="Taux %"
-                    value={values[String(criterion.id)]?.conformity_rate ?? ""}
-                    onChange={(e) => updateValue(criterion.id, "conformity_rate", e.target.value)}
-                    style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }}
-                  />
-                  <textarea
-                    placeholder="Commentaire"
-                    value={values[String(criterion.id)]?.comment ?? ""}
-                    onChange={(e) => updateValue(criterion.id, "comment", e.target.value)}
-                    style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb", minHeight: 88 }}
-                  />
-                  <textarea
-                    placeholder="Preuve / mode de preuve"
-                    value={values[String(criterion.id)]?.proof ?? ""}
-                    onChange={(e) => updateValue(criterion.id, "proof", e.target.value)}
-                    style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb", minHeight: 88 }}
-                  />
-                  <input
-                    type="file"
-                    onChange={(e) => updateProofFile(criterion.id, e.target.files?.[0] ?? null)}
-                    style={{ padding: 6 }}
-                  />
+                  <label className="audit-field">
+                    <span className="fiche-label">Taux de conformité</span>
+                    <span className="audit-rate-control">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={values[String(criterion.id)]?.conformity_rate ?? ""}
+                        onChange={(e) => updateValue(criterion.id, "conformity_rate", e.target.value)}
+                        className="form-control audit-rate-input"
+                      />
+                      <span>%</span>
+                    </span>
+                  </label>
+                  <label className="audit-field">
+                    <span className="fiche-label">Commentaire</span>
+                    <textarea
+                      value={values[String(criterion.id)]?.comment ?? ""}
+                      onChange={(e) => updateValue(criterion.id, "comment", e.target.value)}
+                      className="form-control form-textarea audit-textarea"
+                    />
+                  </label>
+                  <label className="audit-field">
+                    <span className="fiche-label">Preuve constatée</span>
+                    <textarea
+                      value={values[String(criterion.id)]?.proof ?? ""}
+                      onChange={(e) => updateValue(criterion.id, "proof", e.target.value)}
+                      className="form-control form-textarea audit-textarea"
+                    />
+                  </label>
+                  <div className="audit-upload-field">
+                    <div className="fiche-label">Fichier de preuve</div>
+                    <label className="audit-upload-control" htmlFor={`proof-file-${criterion.id}`}>
+                      Choisir un fichier
+                    </label>
+                    <input
+                      id={`proof-file-${criterion.id}`}
+                      type="file"
+                      className="audit-file-input"
+                      onChange={(e) => updateProofFile(criterion.id, e.target.files?.[0] ?? null)}
+                    />
+                    <div className="audit-file-name">
+                      {values[String(criterion.id)]?.proofFile?.name ?? currentAssessments?.find((item) => item.criterion === criterion.id)?.proofs?.[0]?.title ?? "Aucun fichier sélectionné"}
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}

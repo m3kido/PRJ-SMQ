@@ -1,4 +1,5 @@
 import { useFetch } from "../hooks/useFetch";
+import { formatDateTime } from "../utils/date";
 
 type Alert = {
   id: number;
@@ -87,7 +88,7 @@ function AdminWorkspacePage() {
           <div className="activity">
             {(alerts ?? []).map((alert) => (
               <div key={alert.id} className="activity-item">
-                <div className="muted" style={{ fontSize: 12 }}>{new Date(alert.created_at).toLocaleString()}</div>
+                <div className="muted" style={{ fontSize: 12 }}>{formatDateTime(alert.created_at)}</div>
                 <div style={{ fontWeight: 700 }}>{alert.alert_type}</div>
                 <div>{alert.message}</div>
               </div>

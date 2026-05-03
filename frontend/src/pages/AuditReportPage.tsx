@@ -1,11 +1,15 @@
 import { useParams } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
+import { formatDate } from "../utils/date";
 
 type Assignment = {
   id: number;
   audit: number;
   process_name: string;
+  process_type?: string;
+  process_department_name?: string;
   auditor_username: string;
+  due_date?: string;
   status: string;
 };
 
@@ -31,6 +35,7 @@ type Clause = {
 type NonConformity = {
   id: number;
   reference: string;
+  process_name?: string;
   severity: string;
   status: string;
   description: string;
@@ -38,108 +43,203 @@ type NonConformity = {
   criterion_title?: string;
 };
 
+function processTypeLabel(value?: string) {
+  if (value === "operationnel") return "Opérationnel";
+  if (value === "support") return "Support";
+  if (value === "management") return "Management";
+  return value ?? "-";
+}
+
+function rateTone(rate: string | null) {
+  const value = Number(rate ?? 0);
+  if (value >= 90) return "good";
+  if (value >= 60) return "watch";
+  return "critical";
+}
+
 function AuditReportPage() {
   const { id } = useParams();
   const { data: assignment } = useFetch<Assignment>(`/audit-assignments/${id}/`, [id]);
   const { data: results } = useFetch<ComputedResult[]>("/audit-computed-results/");
-  const { data: assessments } = useFetch<Assessment[]>(id ? `/audit-criterion-assessments/?assignment=${id}` : "/audit-criterion-assessments/", [id]);
+  const { data: assessments } = useFetch<Assessment[]>(id ? `/audit-criterion-assessments/?assignment=${id}` : "/audit-criterion-assessments/?assignment=0", [id]);
   const { data: clauses } = useFetch<Clause[]>("/iso-clauses/");
-  const { data: ncs } = useFetch<NonConformity[]>(assignment?.audit ? `/non-conformities/?audit=${assignment.audit}` : "/non-conformities/", [assignment?.audit]);
+  const { data: ncs } = useFetch<NonConformity[]>(assignment?.audit ? `/non-conformities/?audit=${assignment.audit}` : "/non-conformities/?audit=0", [assignment?.audit]);
 
   const result = (results ?? []).find((item) => String(item.assignment) === String(id));
   const criteria = new Map((clauses ?? []).flatMap((clause) => clause.criteria.map((criterion) => [criterion.id, criterion])));
   const sortedAssessments = [...(assessments ?? [])].sort((a, b) => (criteria.get(a.criterion)?.code ?? "").localeCompare(criteria.get(b.criterion)?.code ?? ""));
   const conformes = sortedAssessments.filter((item) => Number(item.conformity_rate ?? 0) >= 90).length;
+  const openNcs = (ncs ?? []).filter((item) => item.status !== "resolue");
+  const reportDate = formatDate(new Date());
+  const reportTitle = `Rapport AUD-${assignment?.audit ?? id} - ${assignment?.process_name ?? "Audit"}`;
+
+  const exportPdf = () => {
+    const previousTitle = document.title;
+    const restoreTitle = () => {
+      document.title = previousTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+    document.title = reportTitle;
+    window.addEventListener("afterprint", restoreTitle);
+    window.print();
+  };
 
   return (
-    <div className="dashboard-stack">
-      <section className="dashboard-hero audit-report-hero">
+    <div className="dashboard-stack audit-report-page">
+      <div className="report-toolbar no-print">
         <div>
           <div className="eyebrow">Rapport d'audit</div>
-          <h1 className="dashboard-title">{assignment?.process_name ?? "Audit"}</h1>
-          <p className="dashboard-copy">Le rapport affiche d'abord les statistiques globales, puis le détail des critères évalués.</p>
+          <h1 className="section-title" style={{ margin: 0 }}>{assignment?.process_name ?? "Audit"}</h1>
         </div>
-        <div className="hero-kpi">
-          <span className="hero-kpi-label">Auditeur</span>
-          <strong>{assignment?.auditor_username ?? "-"}</strong>
-        </div>
-      </section>
-
-      <div className="grid stats">
-        <div className="card stat-card stat-card-primary">
-          <div className="card-title">Taux moyen</div>
-          <div className="card-value">{result?.average_rate ?? "0"}%</div>
-          <div className="muted">Résultat global calculé</div>
-        </div>
-        <div className="card stat-card">
-          <div className="card-title">Niveau</div>
-          <div className="card-value">{result?.conformity_level ?? "-"}</div>
-          <div className="muted">{result?.conformity_label ?? "Aucune synthèse"}</div>
-        </div>
-        <div className="card stat-card">
-          <div className="card-title">Critères conformes</div>
-          <div className="card-value">{conformes}</div>
-          <div className="muted">Seuil de conformité atteint</div>
-        </div>
-        <div className="card stat-card">
-          <div className="card-title">NC ouvertes</div>
-          <div className="card-value">{(ncs ?? []).filter((item) => item.status !== "resolue").length}</div>
-          <div className="muted">Issues du dernier audit</div>
-        </div>
+        <button className="btn-primary" onClick={exportPdf}>
+          Exporter PDF
+        </button>
       </div>
 
-      <div className="card">
-        <h3 className="section-title">Non-conformités</h3>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Référence</th>
-              <th>Critère</th>
-              <th>Sévérité</th>
-              <th>Statut</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(ncs ?? []).map((nc) => (
-              <tr key={nc.id}>
-                <td>{nc.reference}</td>
-                <td>{nc.criterion_code ? `${nc.criterion_code} — ${nc.criterion_title ?? ""}` : "-"}</td>
-                <td>{nc.severity}</td>
-                <td>{nc.status}</td>
-                <td>{nc.description}</td>
+      <article className="pdf-report">
+        <section className="report-cover">
+          <div className="report-cover-top">
+            <div>
+              <div className="report-brand">ESI SMQ</div>
+              <div className="report-subtitle">Système de management qualité</div>
+            </div>
+            <div className="report-ref">
+              <span>Rapport</span>
+              <strong>AUD-{assignment?.audit ?? id}</strong>
+            </div>
+          </div>
+          <div className="report-title-block">
+            <div className="eyebrow">Rapport d'audit</div>
+            <h1>{assignment?.process_name ?? "Audit"}</h1>
+            <p>{result?.conformity_label ?? "Synthèse établie à partir des critères évalués et des non-conformités constatées."}</p>
+          </div>
+          <div className="report-meta-grid">
+            <div>
+              <span>Auditeur</span>
+              <strong>{assignment?.auditor_username ?? "-"}</strong>
+            </div>
+            <div>
+              <span>Département</span>
+              <strong>{assignment?.process_department_name ?? "-"}</strong>
+            </div>
+            <div>
+              <span>Type de processus</span>
+              <strong>{processTypeLabel(assignment?.process_type)}</strong>
+            </div>
+            <div>
+              <span>Date du rapport</span>
+              <strong>{reportDate}</strong>
+            </div>
+            <div>
+              <span>Échéance</span>
+              <strong>{formatDate(assignment?.due_date, "-")}</strong>
+            </div>
+            <div>
+              <span>Statut</span>
+              <strong>{assignment?.status ?? "-"}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section className="report-section">
+          <div className="report-section-head">
+            <div>
+              <div className="eyebrow">Synthèse</div>
+              <h2>Résultat global</h2>
+            </div>
+          </div>
+          <div className="report-kpi-grid">
+            <div className="report-kpi-card primary">
+              <span>Taux moyen</span>
+              <strong>{result?.average_rate ?? "0"}%</strong>
+            </div>
+            <div className="report-kpi-card">
+              <span>Niveau</span>
+              <strong>{result?.conformity_level ?? "-"}</strong>
+            </div>
+            <div className="report-kpi-card">
+              <span>Critères conformes</span>
+              <strong>{conformes}/{sortedAssessments.length}</strong>
+            </div>
+            <div className="report-kpi-card">
+              <span>NC ouvertes</span>
+              <strong>{openNcs.length}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section className="report-section">
+          <div className="report-section-head">
+            <div>
+              <div className="eyebrow">Constats</div>
+              <h2>Non-conformités</h2>
+            </div>
+          </div>
+          <table className="report-table">
+            <thead>
+              <tr>
+                <th>Processus</th>
+                <th>Critère</th>
+                <th>Sévérité</th>
+                <th>État</th>
+                <th>Constat</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card">
-        <h3 className="section-title">Valeurs des critères</h3>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Code</th>
-              <th>Critère</th>
-              <th>Taux</th>
-              <th>Commentaire</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedAssessments.map((assessment) => {
-              const criterion = criteria.get(assessment.criterion);
-              return (
-                <tr key={assessment.id}>
-                  <td>{criterion?.code ?? "-"}</td>
-                  <td>{criterion?.title ?? "-"}</td>
-                  <td>{assessment.conformity_rate ?? "-"}%</td>
-                  <td>{assessment.comment || "-"}</td>
+            </thead>
+            <tbody>
+              {(ncs ?? []).length ? (ncs ?? []).map((nc) => (
+                <tr key={nc.id}>
+                  <td>{nc.process_name ?? assignment?.process_name ?? "-"}</td>
+                  <td>{nc.criterion_title || nc.criterion_code || "-"}</td>
+                  <td><span className={`report-pill ${nc.severity}`}>{nc.severity}</span></td>
+                  <td>{nc.status}</td>
+                  <td>{nc.description}</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              )) : (
+                <tr>
+                  <td colSpan={5}>Aucune non-conformité liée à cet audit.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="report-section">
+          <div className="report-section-head">
+            <div>
+              <div className="eyebrow">Évaluation</div>
+              <h2>Valeurs des critères</h2>
+            </div>
+          </div>
+          <table className="report-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Critère</th>
+                <th>Taux</th>
+                <th>Commentaire</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedAssessments.map((assessment) => {
+                const criterion = criteria.get(assessment.criterion);
+                return (
+                  <tr key={assessment.id}>
+                    <td>{criterion?.code ?? "-"}</td>
+                    <td>{criterion?.title ?? "-"}</td>
+                    <td><span className={`report-rate ${rateTone(assessment.conformity_rate)}`}>{assessment.conformity_rate ?? "-"}%</span></td>
+                    <td>{assessment.comment || "-"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+
+        <footer className="report-footer">
+          <span>Rapport AUD-{assignment?.audit ?? id}</span>
+          <span>Généré le {reportDate}</span>
+        </footer>
+      </article>
     </div>
   );
 }

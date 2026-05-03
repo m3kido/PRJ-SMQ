@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
+import AppDateInput from "./AppDateInput";
 
 type Process = { id: number; name: string };
 
@@ -77,10 +78,9 @@ function NonConformityForm({ onSuccess }: Props) {
         />
         <div style={{ display: "grid", gap: 6 }}>
           <label>Date de détection</label>
-          <input
-            type="date"
+          <AppDateInput
             value={detectedAt}
-            onChange={(e) => setDetectedAt(e.target.value)}
+            onChange={setDetectedAt}
             style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }}
           />
         </div>

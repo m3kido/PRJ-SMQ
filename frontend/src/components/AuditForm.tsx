@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
+import AppDateInput from "./AppDateInput";
 
 type Process = { id: number; name: string };
 type User = { id: number; username: string };
@@ -97,11 +98,11 @@ function AuditForm({ onSuccess }: Props) {
         <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
           <div style={{ display: "grid", gap: 6 }}>
             <label>Début</label>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }} />
+            <AppDateInput value={startDate} onChange={setStartDate} style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }} />
           </div>
           <div style={{ display: "grid", gap: 6 }}>
             <label>Fin</label>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }} />
+            <AppDateInput value={endDate} onChange={setEndDate} style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }} />
           </div>
         </div>
 

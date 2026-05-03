@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
+import AppDateInput from "./AppDateInput";
 
 type Process = { id: number; name: string };
 
@@ -10,7 +11,7 @@ type Props = {
   nc: {
     id: number;
     reference: string;
-    process?: { id: number; name: string };
+    process: number;
     severity: string;
     status: string;
     description: string;
@@ -32,7 +33,7 @@ function NonConformityEditModal({ open, onClose, nc, onSuccess }: Props) {
   useEffect(() => {
     if (nc) {
       setReference(nc.reference);
-      setProcessId(nc.process?.id ? String(nc.process.id) : "");
+      setProcessId(nc.process ? String(nc.process) : "");
       setSeverity(nc.severity);
       setStatus(nc.status);
       setDescription(nc.description);
@@ -106,10 +107,9 @@ function NonConformityEditModal({ open, onClose, nc, onSuccess }: Props) {
         />
         <div style={{ display: "grid", gap: 6 }}>
           <label>Date de détection</label>
-          <input
-            type="date"
+          <AppDateInput
             value={detectedAt}
-            onChange={(e) => setDetectedAt(e.target.value)}
+            onChange={setDetectedAt}
             style={{ padding: 10, borderRadius: 8, border: "1px solid #e5e7eb" }}
           />
         </div>

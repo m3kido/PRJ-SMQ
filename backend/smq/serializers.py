@@ -9,7 +9,6 @@ from .models import (
     Audit,
     NonConformity,
     CorrectiveAction,
-    Document,
     Notification,
     Kpi,
     UserProfile,
@@ -57,6 +56,7 @@ class ProcessSerializer(serializers.ModelSerializer):
             "department",
             "department_name",
             "description",
+            "bpmn_xml",
             "completeness",
             "updated_at",
             "created_at",
@@ -72,12 +72,18 @@ class AuditSerializer(serializers.ModelSerializer):
 
 class NonConformitySerializer(serializers.ModelSerializer):
     process_name = serializers.CharField(source="process.name", read_only=True)
-    criterion_code = serializers.CharField(source="criterion.code", read_only=True)
-    criterion_title = serializers.CharField(source="criterion.title", read_only=True)
+    criterion_code = serializers.SerializerMethodField()
+    criterion_title = serializers.SerializerMethodField()
     audit_reference = serializers.SerializerMethodField()
 
     def get_audit_reference(self, obj):
         return f"AUD-{obj.audit_id}" if obj.audit_id else ""
+
+    def get_criterion_code(self, obj):
+        return obj.criterion.code if obj.criterion_id else ""
+
+    def get_criterion_title(self, obj):
+        return obj.criterion.title if obj.criterion_id else ""
 
     class Meta:
         model = NonConformity
@@ -99,17 +105,83 @@ class NonConformitySerializer(serializers.ModelSerializer):
             "created_at",
         ]
 
+    def validate(self, attrs):
+        process = attrs.get("process", getattr(self.instance, "process", None))
+        criterion = attrs.get("criterion", getattr(self.instance, "criterion", None))
+        if process and criterion:
+            duplicate = NonConformity.objects.filter(process=process, criterion=criterion)
+            if self.instance:
+                duplicate = duplicate.exclude(pk=self.instance.pk)
+            if duplicate.exists():
+                raise serializers.ValidationError({
+                    "criterion": "Une non-conformité existe déjà pour ce processus et ce critère."
+                })
+        return attrs
+
 
 class CorrectiveActionSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(max_length=255, allow_blank=False)
+    body = serializers.CharField(allow_blank=False)
+    process_name = serializers.SerializerMethodField()
+    assignee_username = serializers.SerializerMethodField()
+    non_conformity_reference = serializers.SerializerMethodField()
+    assignee = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = CorrectiveAction
-        fields = "__all__"
+        fields = [
+            "id",
+            "process",
+            "process_name",
+            "non_conformity",
+            "non_conformity_reference",
+            "title",
+            "body",
+            "assignee",
+            "assignee_username",
+            "due_date",
+            "completed",
+            "evidence",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["assignee", "created_at", "updated_at"]
 
+    def get_process_name(self, obj):
+        return obj.process.name if obj.process_id else ""
 
-class DocumentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Document
-        fields = "__all__"
+    def get_assignee_username(self, obj):
+        return obj.assignee.username if obj.assignee_id else ""
+
+    def get_non_conformity_reference(self, obj):
+        return obj.non_conformity.reference if obj.non_conformity_id else ""
+
+    def validate(self, attrs):
+        process = attrs.get("process", getattr(self.instance, "process", None))
+        non_conformity = attrs.get("non_conformity", getattr(self.instance, "non_conformity", None))
+        if process is None and non_conformity is not None:
+            attrs["process"] = non_conformity.process
+            process = non_conformity.process
+        if process is None:
+            raise serializers.ValidationError({"process": "Sélectionnez un processus."})
+        return attrs
+
+    def create(self, validated_data):
+        process = validated_data.get("process")
+        if process is None and validated_data.get("non_conformity"):
+            process = validated_data["non_conformity"].process
+            validated_data["process"] = process
+        validated_data["assignee"] = process.owner
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        process = validated_data.get("process")
+        if process is None and "non_conformity" in validated_data and validated_data["non_conformity"]:
+            process = validated_data["non_conformity"].process
+            validated_data["process"] = process
+        if process is not None:
+            validated_data["assignee"] = process.owner
+        return super().update(instance, validated_data)
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -231,10 +303,20 @@ class UserManagementSerializer(serializers.ModelSerializer):
 class IsoCriterionSerializer(serializers.ModelSerializer):
     clause_reference = serializers.CharField(source="clause.reference", read_only=True)
     clause_title = serializers.CharField(source="clause.title", read_only=True)
+    process_types = serializers.ListField(
+        child=serializers.ChoiceField(choices=[choice[0] for choice in Process.PROCESS_TYPE_CHOICES]),
+        required=False,
+        allow_empty=False,
+    )
 
     class Meta:
         model = IsoCriterion
         fields = "__all__"
+
+    def validate(self, attrs):
+        if self.instance is None and "process_types" not in attrs:
+            attrs["process_types"] = [choice[0] for choice in Process.PROCESS_TYPE_CHOICES]
+        return attrs
 
 
 class IsoClauseSerializer(serializers.ModelSerializer):
@@ -252,7 +334,11 @@ class ProcessSheetTemplateSerializer(serializers.ModelSerializer):
 
 
 class ManagedProcessSheetSerializer(serializers.ModelSerializer):
+    process = serializers.PrimaryKeyRelatedField(
+        queryset=Process.objects.all(), required=False, allow_null=True
+    )
     process_name = serializers.CharField(source="process.name", read_only=True)
+    process_bpmn_xml = serializers.CharField(source="process.bpmn_xml", read_only=True)
     manager_username = serializers.CharField(source="assigned_manager.username", read_only=True)
     process_department_name = serializers.CharField(source="process.department.name", read_only=True)
     process_title = serializers.CharField(write_only=True, required=False, allow_blank=False)
@@ -268,6 +354,13 @@ class ManagedProcessSheetSerializer(serializers.ModelSerializer):
         model = ManagedProcessSheet
         fields = "__all__"
         read_only_fields = ["assigned_by", "submitted_at", "validated_at"]
+
+    def validate(self, attrs):
+        if self.instance is None and not attrs.get("process") and not attrs.get("process_title"):
+            raise serializers.ValidationError({
+                "process_title": "Renseignez un processus à créer ou sélectionnez un processus existant."
+            })
+        return attrs
 
     def create(self, validated_data):
         request = self.context.get("request")
@@ -305,6 +398,7 @@ class ManagedProcessSheetSerializer(serializers.ModelSerializer):
 
 class AuditAssignmentSerializer(serializers.ModelSerializer):
     process_name = serializers.CharField(source="process.name", read_only=True)
+    process_type = serializers.CharField(source="process.type", read_only=True)
     auditor_username = serializers.CharField(source="assigned_auditor.username", read_only=True)
     process_department_name = serializers.CharField(source="process.department.name", read_only=True)
     audit = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -343,6 +437,7 @@ class AuditEvidenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = AuditEvidence
         fields = "__all__"
+        read_only_fields = ["created_by", "created_at"]
 
 
 class AuditCriterionAssessmentSerializer(serializers.ModelSerializer):
@@ -351,6 +446,7 @@ class AuditCriterionAssessmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = AuditCriterionAssessment
         fields = "__all__"
+        validators = []
 
 
 class DeadlineAlertSerializer(serializers.ModelSerializer):

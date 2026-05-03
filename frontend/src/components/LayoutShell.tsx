@@ -10,7 +10,6 @@ const navItems = [
   { to: "/actions", label: "Actions Correctives", icon: "↗", roles: ["admin", "auditeur_interne"] },
   { to: "/criteria", label: "Critères ISO", icon: "≣", roles: ["admin", "auditeur_interne"] },
   { to: "/evaluation-scales", label: "Échelles", icon: "◍", roles: ["admin", "auditeur_interne"] },
-  { to: "/documents", label: "Documents", icon: "▤", roles: ["admin", "gestionnaire", "auditeur_interne"] },
   { to: "/administration", label: "Administration", icon: "◧", roles: ["admin"] },
 ];
 

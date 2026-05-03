@@ -5,11 +5,12 @@ import ActionEditModal from "../components/ActionEditModal";
 
 type Action = {
   id: number;
+  process: number | null;
+  process_name?: string;
   title: string;
-  due_date: string | null;
+  body: string;
+  assignee_username?: string;
   completed: boolean;
-  non_conformity: { id: number; reference: string };
-  assignee: { id: number; username: string };
 };
 
 function ActionsPage() {
@@ -29,9 +30,9 @@ function ActionsPage() {
           <thead>
             <tr>
               <th>Action</th>
-              <th>NC liée</th>
+              <th>Processus</th>
               <th>Assigné à</th>
-              <th>Échéance</th>
+              <th>Description</th>
               <th>Statut</th>
               <th></th>
             </tr>
@@ -40,9 +41,9 @@ function ActionsPage() {
             {actions.map((a) => (
               <tr key={a.id}>
                 <td>{a.title}</td>
-                <td>{a.non_conformity?.reference ?? ""}</td>
-                <td>{a.assignee?.username ?? ""}</td>
-                <td>{a.due_date ? new Date(a.due_date).toLocaleDateString() : ""}</td>
+                <td>{a.process_name ?? "-"}</td>
+                <td>{a.assignee_username ?? "-"}</td>
+                <td className="table-copy-cell">{a.body || "-"}</td>
                 <td>{a.completed ? "Clôturée" : "Ouverte"}</td>
                 <td className="table-actions">
                   <button className="tag" onClick={() => setEditing(a)}>
