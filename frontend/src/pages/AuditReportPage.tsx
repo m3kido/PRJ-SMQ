@@ -43,6 +43,17 @@ type NonConformity = {
   criterion_title?: string;
 };
 
+type EvaluationScaleLevel = {
+  min_average: string;
+  max_average: string;
+  conformity_level: string;
+};
+
+type EvaluationScale = {
+  id: number;
+  levels: EvaluationScaleLevel[];
+};
+
 function processTypeLabel(value?: string) {
   if (value === "operationnel") return "Opérationnel";
   if (value === "support") return "Support";
@@ -50,8 +61,24 @@ function processTypeLabel(value?: string) {
   return value ?? "-";
 }
 
-function rateTone(rate: string | null) {
+function matchScaleLevel(rate: string | null, levels: EvaluationScaleLevel[]) {
   const value = Number(rate ?? 0);
+  return levels.find((level) => Number(level.min_average) <= value && value <= Number(level.max_average));
+}
+
+function isConformingRate(rate: string | null, levels: EvaluationScaleLevel[]) {
+  const value = Number(rate ?? 0);
+  const level = matchScaleLevel(rate, levels);
+  if (level) return level.conformity_level.toLowerCase() === "conforme";
+  return levels.length === 0 && value >= 90;
+}
+
+function rateTone(rate: string | null, levels: EvaluationScaleLevel[]) {
+  const value = Number(rate ?? 0);
+  const level = matchScaleLevel(rate, levels);
+  if (level?.conformity_level.toLowerCase() === "conforme") return "good";
+  if (level?.conformity_level.toLowerCase() === "insuffisant") return "critical";
+  if (levels.length > 0) return "watch";
   if (value >= 90) return "good";
   if (value >= 60) return "watch";
   return "critical";
@@ -64,11 +91,13 @@ function AuditReportPage() {
   const { data: assessments } = useFetch<Assessment[]>(id ? `/audit-criterion-assessments/?assignment=${id}` : "/audit-criterion-assessments/?assignment=0", [id]);
   const { data: clauses } = useFetch<Clause[]>("/iso-clauses/");
   const { data: ncs } = useFetch<NonConformity[]>(assignment?.audit ? `/non-conformities/?audit=${assignment.audit}` : "/non-conformities/?audit=0", [assignment?.audit]);
+  const { data: scales } = useFetch<EvaluationScale[]>("/evaluation-scales/");
 
   const result = (results ?? []).find((item) => String(item.assignment) === String(id));
+  const scaleLevels = [...(scales?.[0]?.levels ?? [])].sort((a, b) => Number(a.min_average) - Number(b.min_average));
   const criteria = new Map((clauses ?? []).flatMap((clause) => clause.criteria.map((criterion) => [criterion.id, criterion])));
   const sortedAssessments = [...(assessments ?? [])].sort((a, b) => (criteria.get(a.criterion)?.code ?? "").localeCompare(criteria.get(b.criterion)?.code ?? ""));
-  const conformes = sortedAssessments.filter((item) => Number(item.conformity_rate ?? 0) >= 90).length;
+  const conformes = sortedAssessments.filter((item) => isConformingRate(item.conformity_rate, scaleLevels)).length;
   const openNcs = (ncs ?? []).filter((item) => item.status !== "resolue");
   const reportDate = formatDate(new Date());
   const reportTitle = `Rapport AUD-${assignment?.audit ?? id} - ${assignment?.process_name ?? "Audit"}`;
@@ -226,7 +255,7 @@ function AuditReportPage() {
                   <tr key={assessment.id}>
                     <td>{criterion?.code ?? "-"}</td>
                     <td>{criterion?.title ?? "-"}</td>
-                    <td><span className={`report-rate ${rateTone(assessment.conformity_rate)}`}>{assessment.conformity_rate ?? "-"}%</span></td>
+                    <td><span className={`report-rate ${rateTone(assessment.conformity_rate, scaleLevels)}`}>{assessment.conformity_rate ?? "-"}%</span></td>
                     <td>{assessment.comment || "-"}</td>
                   </tr>
                 );

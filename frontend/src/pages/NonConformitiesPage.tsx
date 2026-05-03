@@ -17,7 +17,7 @@ type NC = {
 };
 
 function NonConformitiesPage() {
-  const { data, loading, error, refetch } = useFetch<NC[]>("/non-conformities/");
+  const { data, loading, error, refetch } = useFetch<NC[]>("/non-conformities/?active=true");
   const ncs = data ?? [];
   const [editing, setEditing] = useState<NC | null>(null);
 

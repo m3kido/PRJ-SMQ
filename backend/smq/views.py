@@ -113,12 +113,15 @@ class NonConformityViewSet(viewsets.ModelViewSet):
         process_id = self.request.query_params.get("process")
         audit_id = self.request.query_params.get("audit")
         status_value = self.request.query_params.get("status")
+        active_only = self.request.query_params.get("active")
         if process_id:
             qs = qs.filter(process_id=process_id)
         if audit_id:
             qs = qs.filter(audit_id=audit_id)
         if status_value:
             qs = qs.filter(status=status_value)
+        if active_only == "true":
+            qs = qs.exclude(status="resolue")
         return qs.order_by("-updated_at", "-created_at")
 
 
@@ -224,6 +227,7 @@ class AuditAssignmentViewSet(viewsets.ModelViewSet):
             assessments = assignment.criterion_assessments.exclude(conformity_rate__isnull=True)
             average = Decimal("0")
             matched_level = None
+            conforming_count = 0
             scale = EvaluationScale.objects.prefetch_related("levels").first()
 
             def match_level(rate_value):
@@ -233,6 +237,11 @@ class AuditAssignmentViewSet(viewsets.ModelViewSet):
                     if Decimal(level.min_average) <= rate_value <= Decimal(level.max_average):
                         return level
                 return None
+
+            def is_conforming_level(level, rate_value):
+                if level:
+                    return level.conformity_level.lower() == "conforme"
+                return not scale and rate_value >= Decimal("90")
 
             def severity_for_level(level):
                 if not level:
@@ -257,10 +266,11 @@ class AuditAssignmentViewSet(viewsets.ModelViewSet):
                     },
                 )
                 for item in assessments.select_related("criterion"):
-                    criterion_level = match_level(item.conformity_rate or Decimal("0"))
-                    is_conforming = bool(
-                        criterion_level and criterion_level.conformity_level.lower() == "conforme"
-                    )
+                    rate_value = item.conformity_rate or Decimal("0")
+                    criterion_level = match_level(rate_value)
+                    is_conforming = is_conforming_level(criterion_level, rate_value)
+                    if is_conforming:
+                        conforming_count += 1
                     nc = NonConformity.objects.filter(
                         process=assignment.process,
                         criterion=item.criterion,
@@ -319,7 +329,7 @@ class AuditAssignmentViewSet(viewsets.ModelViewSet):
                 "",
                 "Statistiques :",
                 f"- Nombre de critères évalués : {assessments.count()}",
-                f"- Critères conformes : {assessments.filter(conformity_rate__gte=Decimal('90')).count()}",
+                f"- Critères conformes : {conforming_count}",
                 f"- Non-conformités ouvertes : {related_ncs.exclude(status='resolue').count()}",
                 "",
                 "Valeurs par critère :",
