@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { useFetch } from "../hooks/useFetch";
 import { formatDate } from "../utils/date";
 import SortableHeader from "../components/SortableHeader";
+import { TableLoadingRow } from "../components/LoadingStates";
+import { ShowMoreButton, useShowMoreList } from "../components/ShowMoreList";
 import { sortItems, SortConfig } from "../utils/tableSort";
 
 type ManagedSheet = {
@@ -66,10 +68,10 @@ const actionSortAccessors = {
 };
 
 function GestionnaireWorkspacePage() {
-  const { data } = useFetch<ManagedSheet[]>("/managed-process-sheets/");
-  const { data: nonConformities } = useFetch<NonConformity[]>("/non-conformities/");
-  const { data: audits } = useFetch<AuditAssignment[]>("/audit-assignments/");
-  const { data: correctiveActions } = useFetch<CorrectiveAction[]>("/actions/");
+  const { data, loading: sheetsLoading } = useFetch<ManagedSheet[]>("/managed-process-sheets/");
+  const { data: nonConformities, loading: nonConformitiesLoading } = useFetch<NonConformity[]>("/non-conformities/");
+  const { data: audits, loading: auditsLoading } = useFetch<AuditAssignment[]>("/audit-assignments/");
+  const { data: correctiveActions, loading: correctiveActionsLoading } = useFetch<CorrectiveAction[]>("/actions/");
   const [processSort, setProcessSort] = useState<SortConfig>(null);
   const [ncSort, setNcSort] = useState<SortConfig>(null);
   const [auditSort, setAuditSort] = useState<SortConfig>(null);
@@ -82,6 +84,14 @@ function GestionnaireWorkspacePage() {
   const sortedNCs = useMemo(() => sortItems(relatedNCs, ncSort, ncSortAccessors), [relatedNCs, ncSort]);
   const sortedAudits = useMemo(() => sortItems(relatedAudits, auditSort, auditSortAccessors), [relatedAudits, auditSort]);
   const sortedActions = useMemo(() => sortItems(relatedActions, actionSort, actionSortAccessors), [relatedActions, actionSort]);
+  const paginatedProcesses = useShowMoreList(sortedProcesses, [processSort?.key, processSort?.direction, sortedProcesses.length]);
+  const paginatedNCs = useShowMoreList(sortedNCs, [ncSort?.key, ncSort?.direction, sortedNCs.length]);
+  const paginatedActions = useShowMoreList(sortedActions, [actionSort?.key, actionSort?.direction, sortedActions.length]);
+  const paginatedAudits = useShowMoreList(sortedAudits, [auditSort?.key, auditSort?.direction, sortedAudits.length]);
+  const sheetsInitialLoading = sheetsLoading && !data;
+  const ncInitialLoading = nonConformitiesLoading && !nonConformities;
+  const actionsInitialLoading = correctiveActionsLoading && !correctiveActions;
+  const auditsInitialLoading = auditsLoading && !audits;
 
   return (
     <div className="dashboard-stack">
@@ -109,7 +119,9 @@ function GestionnaireWorkspacePage() {
             </tr>
           </thead>
           <tbody>
-            {sortedProcesses.map((item) => (
+            {sheetsInitialLoading ? (
+              <TableLoadingRow colSpan={4} label="Chargement de vos processus..." />
+            ) : paginatedProcesses.visibleItems.map((item) => (
               <tr key={item.id}>
                 <td>{item.process_name}</td>
                 <td>{formatDate(item.due_date)}</td>
@@ -121,8 +133,20 @@ function GestionnaireWorkspacePage() {
                 </td>
               </tr>
             ))}
+            {!sheetsInitialLoading && sortedProcesses.length === 0 && (
+              <tr>
+                <td colSpan={4} className="admin-empty-row">Aucun processus assigné.</td>
+              </tr>
+            )}
           </tbody>
         </table>
+        {!sheetsInitialLoading && (
+          <ShowMoreButton
+            shownCount={paginatedProcesses.shownCount}
+            totalCount={paginatedProcesses.totalCount}
+            onShowMore={paginatedProcesses.showMore}
+          />
+        )}
       </div>
 
       <div className="card">
@@ -136,15 +160,29 @@ function GestionnaireWorkspacePage() {
             </tr>
           </thead>
           <tbody>
-            {sortedNCs.map((item) => (
+            {ncInitialLoading ? (
+              <TableLoadingRow colSpan={3} label="Chargement des non-conformités..." />
+            ) : paginatedNCs.visibleItems.map((item) => (
               <tr key={item.id}>
                 <td>{item.reference}</td>
                 <td>{item.severity}</td>
                 <td>{item.status}</td>
               </tr>
             ))}
+            {!ncInitialLoading && sortedNCs.length === 0 && (
+              <tr>
+                <td colSpan={3} className="admin-empty-row">Aucune non-conformité liée à vos processus.</td>
+              </tr>
+            )}
           </tbody>
         </table>
+        {!ncInitialLoading && (
+          <ShowMoreButton
+            shownCount={paginatedNCs.shownCount}
+            totalCount={paginatedNCs.totalCount}
+            onShowMore={paginatedNCs.showMore}
+          />
+        )}
       </div>
 
       <div className="card">
@@ -159,7 +197,9 @@ function GestionnaireWorkspacePage() {
             </tr>
           </thead>
           <tbody>
-            {sortedActions.map((item) => (
+            {actionsInitialLoading ? (
+              <TableLoadingRow colSpan={4} label="Chargement des actions..." />
+            ) : paginatedActions.visibleItems.map((item) => (
               <tr key={item.id}>
                 <td>{item.title}</td>
                 <td>{item.process_name ?? "-"}</td>
@@ -167,8 +207,20 @@ function GestionnaireWorkspacePage() {
                 <td><Link className="tag" to={`/actions/${item.id}`}>Consulter</Link></td>
               </tr>
             ))}
+            {!actionsInitialLoading && sortedActions.length === 0 && (
+              <tr>
+                <td colSpan={4} className="admin-empty-row">Aucune action corrective liée à vos processus.</td>
+              </tr>
+            )}
           </tbody>
         </table>
+        {!actionsInitialLoading && (
+          <ShowMoreButton
+            shownCount={paginatedActions.shownCount}
+            totalCount={paginatedActions.totalCount}
+            onShowMore={paginatedActions.showMore}
+          />
+        )}
       </div>
 
       <div className="card">
@@ -184,7 +236,9 @@ function GestionnaireWorkspacePage() {
             </tr>
           </thead>
           <tbody>
-            {sortedAudits.map((item) => (
+            {auditsInitialLoading ? (
+              <TableLoadingRow colSpan={5} label="Chargement des audits..." />
+            ) : paginatedAudits.visibleItems.map((item) => (
               <tr key={item.id}>
                 <td>{`AUD-${item.audit}`}</td>
                 <td>{item.process_name}</td>
@@ -197,8 +251,20 @@ function GestionnaireWorkspacePage() {
                 </td>
               </tr>
             ))}
+            {!auditsInitialLoading && sortedAudits.length === 0 && (
+              <tr>
+                <td colSpan={5} className="admin-empty-row">Aucun audit lié à vos processus.</td>
+              </tr>
+            )}
           </tbody>
         </table>
+        {!auditsInitialLoading && (
+          <ShowMoreButton
+            shownCount={paginatedAudits.shownCount}
+            totalCount={paginatedAudits.totalCount}
+            onShowMore={paginatedAudits.showMore}
+          />
+        )}
       </div>
     </div>
   );

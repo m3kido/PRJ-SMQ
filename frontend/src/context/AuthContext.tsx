@@ -1,6 +1,8 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
+import client, { API_BASE } from "../api/client";
 
 type AuthInfo = {
+  id: number | null;
   accessToken: string | null;
   refreshToken: string | null;
   role: string | null;
@@ -11,13 +13,22 @@ type AuthInfo = {
 type AuthContextType = {
   auth: AuthInfo;
   setAuth: (info: AuthInfo) => void;
+  refreshAuth: () => Promise<void>;
   logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function normalizeAvatarUrl(value?: string | null) {
+  if (!value) return null;
+  if (/^(https?:|data:|blob:)/i.test(value)) return value;
+  const host = API_BASE.replace(/\/api\/?$/, "");
+  return `${host}${value.startsWith("/") ? "" : "/"}${value}`;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuthState] = useState<AuthInfo>({
+    id: Number(localStorage.getItem("userId")) || null,
     accessToken: localStorage.getItem("accessToken"),
     refreshToken: localStorage.getItem("refreshToken"),
     role: localStorage.getItem("role"),
@@ -26,6 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
+    if (auth.id) {
+      localStorage.setItem("userId", String(auth.id));
+    } else {
+      localStorage.removeItem("userId");
+    }
     if (auth.accessToken) {
       localStorage.setItem("accessToken", auth.accessToken);
     } else {
@@ -53,10 +69,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [auth]);
 
-  const setAuth = (info: AuthInfo) => setAuthState(info);
+  const setAuth = (info: AuthInfo) => setAuthState({ ...info, avatar: normalizeAvatarUrl(info.avatar) });
+
+  const refreshAuth = useCallback(async () => {
+    if (!localStorage.getItem("accessToken")) return;
+    const resp = await client.get("/me");
+    setAuthState((current) => ({
+      ...current,
+      id: resp.data.id ?? current.id,
+      role: resp.data.role ?? current.role,
+      username: resp.data.username ?? current.username,
+      avatar: normalizeAvatarUrl(resp.data.avatar || resp.data.avatar_url),
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!auth.accessToken) return;
+    refreshAuth().catch(() => undefined);
+  }, [auth.accessToken, refreshAuth]);
 
   const logout = () => {
-    setAuthState({ accessToken: null, refreshToken: null, role: null, username: null, avatar: null });
+    setAuthState({ id: null, accessToken: null, refreshToken: null, role: null, username: null, avatar: null });
+    localStorage.removeItem("userId");
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("role");
@@ -65,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ auth, setAuth, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ auth, setAuth, refreshAuth, logout }}>{children}</AuthContext.Provider>
   );
 }
 

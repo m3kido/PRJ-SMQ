@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
+import { LoadingCard } from "../components/LoadingStates";
 import { formatDate, formatDateTime } from "../utils/date";
 
 type Action = {
@@ -45,7 +46,7 @@ function ActionDetailPage() {
         </div>
       </section>
 
-      {loading && <div className="card muted">Chargement...</div>}
+      {loading && !action && <LoadingCard title="Chargement de l'action" description="Récupération du détail complet..." />}
       {error && <div className="card" style={{ color: "#b91c1c" }}>{error}</div>}
 
       {action && (

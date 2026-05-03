@@ -6,6 +6,8 @@ import { useAuth } from "../context/AuthContext";
 import AppDateInput from "../components/AppDateInput";
 import { formatDate } from "../utils/date";
 import SortableHeader from "../components/SortableHeader";
+import { TableLoadingRow } from "../components/LoadingStates";
+import { ShowMoreButton, useShowMoreList } from "../components/ShowMoreList";
 import { sortItems, SortConfig } from "../utils/tableSort";
 
 type Process = {
@@ -47,7 +49,7 @@ const assignmentSortAccessors = {
 function ProcessesPage() {
   const { auth } = useAuth();
   const { data, loading, error, refetch } = useFetch<Process[]>("/processes/");
-  const { data: assignments, refetch: refetchAssignments } = useFetch<ManagedSheet[]>("/managed-process-sheets/");
+  const { data: assignments, loading: assignmentsLoading, refetch: refetchAssignments } = useFetch<ManagedSheet[]>("/managed-process-sheets/");
   const { data: users } = useFetch<{ id: number; username: string; role: string }[]>("/users/");
   const { data: departments } = useFetch<{ id: number; name: string }[]>("/departments/");
   const { mutate, loading: assigning, error: assignError } = useMutation();
@@ -57,6 +59,12 @@ function ProcessesPage() {
   const [assignmentForm, setAssignmentForm] = useState({ process_title: "", process_department: "", process_type: "operationnel", assigned_manager: "", due_date: "" });
   const sortedProcesses = useMemo(() => sortItems(processes, processSort, processSortAccessors), [processes, processSort]);
   const sortedAssignments = useMemo(() => sortItems(assignments ?? [], assignmentSort, assignmentSortAccessors), [assignments, assignmentSort]);
+  const processesInitialLoading = loading && !data;
+  const assignmentsInitialLoading = assignmentsLoading && !assignments;
+  const isAdmin = auth.role === "admin";
+  const isQualityRole = auth.role === "admin" || auth.role === "responsable_qualite";
+  const paginatedProcesses = useShowMoreList(sortedProcesses, [processSort?.key, processSort?.direction, sortedProcesses.length]);
+  const paginatedAssignments = useShowMoreList(sortedAssignments, [assignmentSort?.key, assignmentSort?.direction, sortedAssignments.length]);
 
   const submitAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,14 +80,35 @@ function ProcessesPage() {
     refetchAssignments();
   };
 
+  const deleteProcess = async (process: Process) => {
+    if (!window.confirm(`Supprimer le processus ${process.name} ?`)) return;
+    try {
+      await mutate("delete", `/processes/${process.id}/`);
+    } catch {
+      return;
+    }
+    refetch();
+    refetchAssignments();
+  };
+
+  const deleteAssignment = async (assignment: ManagedSheet) => {
+    if (!window.confirm(`Supprimer l'affectation du processus ${assignment.process_name} ?`)) return;
+    try {
+      await mutate("delete", `/managed-process-sheets/${assignment.id}/`);
+    } catch {
+      return;
+    }
+    refetchAssignments();
+  };
+
   return (
     <>
       <div className="card">
         <div className="flex-between" style={{ marginBottom: 12 }}>
           <h3 className="section-title">Processus</h3>
         </div>
-        {loading && <div className="muted">Chargement...</div>}
         {error && <div style={{ color: "#b91c1c" }}>{error}</div>}
+        {assignError && <div style={{ color: "#b91c1c" }}>{assignError}</div>}
         <table className="table">
           <thead>
             <tr>
@@ -91,7 +120,9 @@ function ProcessesPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedProcesses.map((p) => (
+            {processesInitialLoading ? (
+              <TableLoadingRow colSpan={5} label="Chargement des processus..." />
+            ) : paginatedProcesses.visibleItems.map((p) => (
               <tr key={p.name}>
                 <td>{p.name}</td>
                 <td>{p.department_name ?? ""}</td>
@@ -99,14 +130,27 @@ function ProcessesPage() {
                 <td>{p.owner_username ?? ""}</td>
                 <td className="table-actions">
                   <Link className="tag" to={`/processes/${p.id}`}>Détails</Link>
+                  {isAdmin && <button className="tag danger-tag" type="button" onClick={() => deleteProcess(p)}>Supprimer</button>}
                 </td>
               </tr>
             ))}
+            {!processesInitialLoading && sortedProcesses.length === 0 && (
+              <tr>
+                <td colSpan={5} className="admin-empty-row">Aucun processus à afficher.</td>
+              </tr>
+            )}
           </tbody>
         </table>
+        {!processesInitialLoading && (
+          <ShowMoreButton
+            shownCount={paginatedProcesses.shownCount}
+            totalCount={paginatedProcesses.totalCount}
+            onShowMore={paginatedProcesses.showMore}
+          />
+        )}
       </div>
 
-      {auth.role === "admin" && (
+      {isQualityRole && (
         <div className="card">
           <h3 className="section-title">Affectations aux gestionnaires</h3>
           <table className="table" style={{ marginBottom: 20 }}>
@@ -117,20 +161,40 @@ function ProcessesPage() {
                 <SortableHeader label="Département" sortKey="department" sortConfig={assignmentSort} onSort={(key, direction) => setAssignmentSort({ key, direction })} />
                 <SortableHeader label="Échéance" sortKey="due_date" sortConfig={assignmentSort} onSort={(key, direction) => setAssignmentSort({ key, direction })} />
                 <SortableHeader label="Statut" sortKey="status" sortConfig={assignmentSort} onSort={(key, direction) => setAssignmentSort({ key, direction })} />
+                {isAdmin && <th></th>}
               </tr>
             </thead>
             <tbody>
-              {sortedAssignments.map((assignment) => (
+              {assignmentsInitialLoading ? (
+                <TableLoadingRow colSpan={isAdmin ? 6 : 5} label="Chargement des affectations..." />
+              ) : paginatedAssignments.visibleItems.map((assignment) => (
                 <tr key={assignment.id}>
                   <td>{assignment.process_name}</td>
                   <td>{assignment.manager_username}</td>
                   <td>{assignment.process_department_name ?? ""}</td>
                   <td>{formatDate(assignment.due_date)}</td>
                   <td>{assignment.status}</td>
+                  {isAdmin && (
+                    <td className="table-actions">
+                      <button className="tag danger-tag" type="button" onClick={() => deleteAssignment(assignment)}>Supprimer</button>
+                    </td>
+                  )}
                 </tr>
               ))}
+              {!assignmentsInitialLoading && sortedAssignments.length === 0 && (
+                <tr>
+                  <td colSpan={isAdmin ? 6 : 5} className="admin-empty-row">Aucune affectation de fiche processus.</td>
+                </tr>
+              )}
             </tbody>
           </table>
+          {!assignmentsInitialLoading && (
+            <ShowMoreButton
+              shownCount={paginatedAssignments.shownCount}
+              totalCount={paginatedAssignments.totalCount}
+              onShowMore={paginatedAssignments.showMore}
+            />
+          )}
 
           <form onSubmit={submitAssignment} style={{ display: "grid", gap: 10 }}>
             <h4 className="section-title" style={{ margin: 0 }}>Assigner un processus</h4>

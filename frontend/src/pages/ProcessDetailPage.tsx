@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useFetch } from "../hooks/useFetch";
 import BpmnDiagram from "../components/BpmnDiagram";
+import { LoadingCard } from "../components/LoadingStates";
 import { labelizeSheetKey, sortSheetEntries } from "../utils/sheetLabels";
 
 type Process = {
@@ -103,7 +104,7 @@ function ProcessDetailPage() {
         )}
       </div>
 
-      {loading && <div className="card muted">Chargement...</div>}
+      {loading && !process && <LoadingCard title="Chargement du processus" description="Récupération de la fiche, des audits et du BPMN..." />}
       {error && <div className="card" style={{ color: "#b91c1c" }}>{error}</div>}
 
       {process?.description && (

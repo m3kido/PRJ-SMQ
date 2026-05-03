@@ -1,8 +1,12 @@
 import { useMemo, useState } from "react";
 import { useFetch } from "../hooks/useFetch";
+import { useMutation } from "../hooks/useMutation";
+import { useAuth } from "../context/AuthContext";
 import NonConformityForm from "../components/NonConformityForm";
 import NonConformityEditModal from "../components/NonConformityEditModal";
 import SortableHeader from "../components/SortableHeader";
+import { TableLoadingRow } from "../components/LoadingStates";
+import { ShowMoreButton, useShowMoreList } from "../components/ShowMoreList";
 import { sortItems, SortConfig } from "../utils/tableSort";
 
 type NC = {
@@ -26,11 +30,26 @@ const ncSortAccessors = {
 };
 
 function NonConformitiesPage() {
+  const { auth } = useAuth();
   const { data, loading, error, refetch } = useFetch<NC[]>("/non-conformities/?active=true");
+  const { mutate, error: deleteError } = useMutation();
   const ncs = data ?? [];
   const [editing, setEditing] = useState<NC | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const sortedNCs = useMemo(() => sortItems(ncs, sortConfig, ncSortAccessors), [ncs, sortConfig]);
+  const initialLoading = loading && !data;
+  const isAdmin = auth.role === "admin";
+  const paginatedNCs = useShowMoreList(sortedNCs, [sortConfig?.key, sortConfig?.direction, sortedNCs.length]);
+
+  const deleteNonConformity = async (nc: NC) => {
+    if (!window.confirm(`Supprimer la non-conformité de ${nc.process_name || "ce processus"} ?`)) return;
+    try {
+      await mutate("delete", `/non-conformities/${nc.id}/`);
+    } catch {
+      return;
+    }
+    refetch();
+  };
 
   return (
     <>
@@ -38,8 +57,8 @@ function NonConformitiesPage() {
         <div className="flex-between" style={{ marginBottom: 12 }}>
           <h3 className="section-title">Non-Conformités</h3>
         </div>
-        {loading && <div className="muted">Chargement...</div>}
         {error && <div style={{ color: "#b91c1c" }}>{error}</div>}
+        {deleteError && <div style={{ color: "#b91c1c" }}>{deleteError}</div>}
         <table className="table">
           <thead>
             <tr>
@@ -51,7 +70,9 @@ function NonConformitiesPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedNCs.map((nc) => (
+            {initialLoading ? (
+              <TableLoadingRow colSpan={5} label="Chargement des non-conformités..." />
+            ) : paginatedNCs.visibleItems.map((nc) => (
               <tr key={nc.id}>
                 <td>{nc.process_name || "-"}</td>
                 <td>{nc.criterion_title || "-"}</td>
@@ -63,11 +84,28 @@ function NonConformitiesPage() {
                   <button className="tag" onClick={() => setEditing(nc)}>
                     Éditer
                   </button>
+                  {isAdmin && (
+                    <button className="tag danger-tag" type="button" onClick={() => deleteNonConformity(nc)}>
+                      Supprimer
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
+            {!initialLoading && sortedNCs.length === 0 && (
+              <tr>
+                <td colSpan={5} className="admin-empty-row">Aucune non-conformité ouverte.</td>
+              </tr>
+            )}
           </tbody>
         </table>
+        {!initialLoading && (
+          <ShowMoreButton
+            shownCount={paginatedNCs.shownCount}
+            totalCount={paginatedNCs.totalCount}
+            onShowMore={paginatedNCs.showMore}
+          />
+        )}
       </div>
       <div className="card compact-form-card">
         <NonConformityForm onSuccess={refetch} />

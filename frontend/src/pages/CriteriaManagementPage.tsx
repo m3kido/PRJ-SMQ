@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
+import { useAuth } from "../context/AuthContext";
 import SortableHeader from "../components/SortableHeader";
+import { TableLoadingRow } from "../components/LoadingStates";
+import { ShowMoreButton, useShowMoreList } from "../components/ShowMoreList";
 import { sortItems, SortConfig } from "../utils/tableSort";
 
 type Criterion = {
@@ -38,6 +41,7 @@ const criteriaSortAccessors = {
 const labelForProcessType = (value: string) => processTypeOptions.find((option) => option.value === value)?.label ?? value;
 
 function CriteriaManagementPage() {
+  const { auth } = useAuth();
   const { data: criteria, loading: criteriaLoading, error: criteriaError, refetch } = useFetch<Criterion[]>("/iso-criteria/");
   const { data: clauses, error: clausesError } = useFetch<Clause[]>("/iso-clauses/");
   const { mutate, loading, error } = useMutation();
@@ -73,6 +77,9 @@ function CriteriaManagementPage() {
     (criteria ?? []).filter((criterion) => (criterion.process_types?.length ? criterion.process_types : defaultProcessTypes).includes(option.value)).length,
   ])), [criteria]);
   const hasFilters = Boolean(query.trim() || clauseFilter || tagFilter !== "all");
+  const initialLoading = criteriaLoading && !criteria;
+  const canDelete = auth.role === "admin";
+  const paginatedCriteria = useShowMoreList(sortedCriteria, [query, clauseFilter, tagFilter, sortConfig?.key, sortConfig?.direction, sortedCriteria.length]);
 
   const toggleProcessType = (value: string) => {
     setForm((current) => {
@@ -209,7 +216,6 @@ function CriteriaManagementPage() {
             <h3 className="section-title">Critères</h3>
             <span className="tag">{sortedCriteria.length}/{criteria?.length ?? 0}</span>
           </div>
-          {criteriaLoading && <div className="muted">Chargement...</div>}
           {criteriaError && <div style={{ color: "#b91c1c", marginBottom: 12 }}>{criteriaError}</div>}
           <table className="table">
             <thead>
@@ -222,7 +228,9 @@ function CriteriaManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedCriteria.map((criterion) => (
+              {initialLoading ? (
+                <TableLoadingRow colSpan={5} label="Chargement des critères..." />
+              ) : paginatedCriteria.visibleItems.map((criterion) => (
                 <tr key={criterion.id}>
                   <td><strong>{criterion.code}</strong></td>
                   <td className="criteria-title-cell">{criterion.title}</td>
@@ -240,18 +248,25 @@ function CriteriaManagementPage() {
                   <td>
                     <div className="table-actions">
                       <button className="tag" onClick={() => startEdit(criterion)}>Éditer</button>
-                      <button className="tag" onClick={() => remove(criterion.id)}>Supprimer</button>
+                      {canDelete && <button className="tag danger-tag" onClick={() => remove(criterion.id)}>Supprimer</button>}
                     </div>
                   </td>
                 </tr>
               ))}
-              {!criteriaLoading && sortedCriteria.length === 0 && (
+              {!initialLoading && sortedCriteria.length === 0 && (
                 <tr>
                   <td colSpan={5} className="muted criteria-empty-row">Aucun critère ne correspond aux filtres.</td>
                 </tr>
               )}
             </tbody>
           </table>
+          {!initialLoading && (
+            <ShowMoreButton
+              shownCount={paginatedCriteria.shownCount}
+              totalCount={paginatedCriteria.totalCount}
+              onShowMore={paginatedCriteria.showMore}
+            />
+          )}
         </div>
 
         <div className="card panel-side">

@@ -149,7 +149,8 @@ class Kpi(models.Model):
 
 class UserProfile(models.Model):
     ROLE_CHOICES = [
-        ("admin", "Administrateur / Responsable Qualité"),
+        ("admin", "Administrateur"),
+        ("responsable_qualite", "Responsable qualité"),
         ("gestionnaire", "Gestionnaire de processus"),
         ("auditeur_interne", "Auditeur interne"),
         ("auditeur_externe", "Auditeur externe"),

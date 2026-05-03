@@ -68,6 +68,7 @@ Demo accounts:
 
 ```text
 admin / admin
+responsable_qualite / responsable_qualite
 gestionnaire / gestionnaire
 auditeur_interne / auditeur_interne
 auditeur_externe / auditeur_externe

@@ -37,6 +37,7 @@ def main():
     # Users
     users_def = [
         ("admin", "admin@example.com", "admin", "admin", "Qualité", "admin"),
+        ("responsable_qualite", "rq@example.com", "responsable_qualite", "Responsable Qualité", "Qualité", "responsable_qualite"),
         ("gestionnaire", "gestionnaire@example.com", "gestionnaire", "gestionnaire", "Production", "gestionnaire"),
         ("auditeur_interne", "ai@example.com", "auditeur_interne", "auditeur_interne", "Qualité", "auditeur_interne"),
         ("auditeur_externe", "ae@example.com", "auditeur_externe", "auditeur_externe", None, "auditeur_externe"),

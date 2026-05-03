@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
+import { useMutation } from "../hooks/useMutation";
 import { useAuth } from "../context/AuthContext";
 import ActionForm from "../components/ActionForm";
 import ActionEditModal from "../components/ActionEditModal";
 import SortableHeader from "../components/SortableHeader";
+import { TableLoadingRow } from "../components/LoadingStates";
+import { ShowMoreButton, useShowMoreList } from "../components/ShowMoreList";
 import { sortItems, SortConfig } from "../utils/tableSort";
 
 type Action = {
@@ -27,11 +30,25 @@ const actionSortAccessors = {
 function ActionsPage() {
   const { auth } = useAuth();
   const { data, loading, error, refetch } = useFetch<Action[]>("/actions/");
+  const { mutate, error: deleteError } = useMutation();
   const actions = data ?? [];
   const [editing, setEditing] = useState<Action | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const sortedActions = useMemo(() => sortItems(actions, sortConfig, actionSortAccessors), [actions, sortConfig]);
-  const canManageActions = auth.role === "admin" || auth.role === "auditeur_interne";
+  const isAdmin = auth.role === "admin";
+  const canManageActions = auth.role === "admin" || auth.role === "responsable_qualite" || auth.role === "auditeur_interne";
+  const initialLoading = loading && !data;
+  const paginatedActions = useShowMoreList(sortedActions, [sortConfig?.key, sortConfig?.direction, sortedActions.length]);
+
+  const deleteAction = async (action: Action) => {
+    if (!window.confirm(`Supprimer l'action corrective ${action.title} ?`)) return;
+    try {
+      await mutate("delete", `/actions/${action.id}/`);
+    } catch {
+      return;
+    }
+    refetch();
+  };
 
   return (
     <>
@@ -39,8 +56,8 @@ function ActionsPage() {
         <div className="flex-between" style={{ marginBottom: 12 }}>
           <h3 className="section-title">Actions Correctives</h3>
         </div>
-        {loading && <div className="muted">Chargement...</div>}
         {error && <div style={{ color: "#b91c1c" }}>{error}</div>}
+        {deleteError && <div style={{ color: "#b91c1c" }}>{deleteError}</div>}
         <table className="table">
           <thead>
             <tr>
@@ -52,7 +69,9 @@ function ActionsPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedActions.map((a) => (
+            {initialLoading ? (
+              <TableLoadingRow colSpan={5} label="Chargement des actions..." />
+            ) : paginatedActions.visibleItems.map((a) => (
               <tr key={a.id}>
                 <td>{a.title}</td>
                 <td>{a.process_name ?? "-"}</td>
@@ -67,11 +86,28 @@ function ActionsPage() {
                       Éditer
                     </button>
                   )}
+                  {isAdmin && (
+                    <button className="tag danger-tag" type="button" onClick={() => deleteAction(a)}>
+                      Supprimer
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
+            {!initialLoading && sortedActions.length === 0 && (
+              <tr>
+                <td colSpan={5} className="admin-empty-row">Aucune action corrective à afficher.</td>
+              </tr>
+            )}
           </tbody>
         </table>
+        {!initialLoading && (
+          <ShowMoreButton
+            shownCount={paginatedActions.shownCount}
+            totalCount={paginatedActions.totalCount}
+            onShowMore={paginatedActions.showMore}
+          />
+        )}
       </div>
       {canManageActions && (
         <div className="card compact-form-card">

@@ -1,5 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
+import { LoadingCard } from "../components/LoadingStates";
 import { formatDate } from "../utils/date";
 
 type Assignment = {
@@ -86,7 +87,7 @@ function rateTone(rate: string | null, levels: EvaluationScaleLevel[]) {
 
 function AuditReportPage() {
   const { id } = useParams();
-  const { data: assignment } = useFetch<Assignment>(`/audit-assignments/${id}/`, [id]);
+  const { data: assignment, loading: assignmentLoading } = useFetch<Assignment>(`/audit-assignments/${id}/`, [id]);
   const { data: results } = useFetch<ComputedResult[]>("/audit-computed-results/");
   const { data: assessments } = useFetch<Assessment[]>(id ? `/audit-criterion-assessments/?assignment=${id}` : "/audit-criterion-assessments/?assignment=0", [id]);
   const { data: clauses } = useFetch<Clause[]>("/iso-clauses/");
@@ -112,6 +113,20 @@ function AuditReportPage() {
     window.addEventListener("afterprint", restoreTitle);
     window.print();
   };
+
+  if (assignmentLoading && !assignment) {
+    return (
+      <div className="dashboard-stack audit-report-page">
+        <div className="report-toolbar no-print">
+          <div>
+            <div className="eyebrow">Rapport d'audit</div>
+            <h1 className="section-title" style={{ margin: 0 }}>Préparation du rapport</h1>
+          </div>
+        </div>
+        <LoadingCard title="Chargement du rapport" description="Récupération des résultats, critères et non-conformités..." />
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-stack audit-report-page">

@@ -7,12 +7,14 @@ function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const { setAuth } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSubmitting(true);
     try {
       const resp = await client.post("/auth/token/", { username, password });
       localStorage.setItem("accessToken", resp.data.access);
@@ -22,6 +24,7 @@ function LoginPage() {
       });
       const role = me.data.role ?? null;
       setAuth({
+        id: me.data.id ?? null,
         accessToken: resp.data.access,
         refreshToken: resp.data.refresh,
         role,
@@ -39,6 +42,8 @@ function LoginPage() {
       } else {
         setError("Connexion au backend impossible ou réponse inattendue");
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -60,8 +65,8 @@ function LoginPage() {
           style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #e5e7eb", marginBottom: 16 }}
         />
         {error && <div style={{ color: "#b91c1c", marginBottom: 12 }}>{error}</div>}
-        <button type="submit" className="btn-primary" style={{ width: "100%", justifyContent: "center" }}>
-          Se connecter
+        <button type="submit" className="btn-primary" disabled={submitting} style={{ width: "100%", justifyContent: "center" }}>
+          {submitting ? "Connexion..." : "Se connecter"}
         </button>
       </form>
     </div>

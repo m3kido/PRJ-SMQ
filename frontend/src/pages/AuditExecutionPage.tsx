@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
+import { LoadingCard } from "../components/LoadingStates";
 import { formatDate } from "../utils/date";
 
 type Assignment = {
@@ -314,7 +315,7 @@ function AuditExecutionPage() {
         </div>
       </section>
 
-      {loading && <div className="card muted">Chargement...</div>}
+      {(loading || clausesLoading) && !assignment && <LoadingCard title="Chargement de l'audit" description="Préparation des critères ISO et des dernières valeurs..." />}
       {error && <div className="card" style={{ color: "#b91c1c" }}>{error}</div>}
       {done && <div className="card" style={{ color: "#2f7d5a" }}>Audit terminé. Le rapport, les résultats calculés et les non-conformités automatiques ont été générés.</div>}
 

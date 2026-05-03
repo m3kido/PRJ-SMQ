@@ -6,6 +6,8 @@ import { useAuth } from "../context/AuthContext";
 import AppDateInput from "../components/AppDateInput";
 import { formatDate } from "../utils/date";
 import SortableHeader from "../components/SortableHeader";
+import { TableLoadingRow } from "../components/LoadingStates";
+import { ShowMoreButton, useShowMoreList } from "../components/ShowMoreList";
 import { sortItems, SortConfig } from "../utils/tableSort";
 
 type AuditAssignment = {
@@ -38,6 +40,10 @@ function AuditsPage() {
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [assignmentForm, setAssignmentForm] = useState({ process: "", assigned_auditor: "", due_date: "" });
   const sortedAssignments = useMemo(() => sortItems(assignments, sortConfig, auditSortAccessors), [assignments, sortConfig]);
+  const initialLoading = loading && !data;
+  const isAdmin = auth.role === "admin";
+  const isQualityRole = auth.role === "admin" || auth.role === "responsable_qualite";
+  const paginatedAssignments = useShowMoreList(sortedAssignments, [sortConfig?.key, sortConfig?.direction, sortedAssignments.length]);
 
   const submitAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,14 +56,24 @@ function AuditsPage() {
     refetch();
   };
 
+  const deleteAssignment = async (assignment: AuditAssignment) => {
+    if (!window.confirm(`Supprimer l'audit AUD-${assignment.audit} sur ${assignment.process_name} ?`)) return;
+    try {
+      await mutate("delete", `/audit-assignments/${assignment.id}/`);
+    } catch {
+      return;
+    }
+    refetch();
+  };
+
   return (
     <>
       <div className="card">
         <div className="flex-between" style={{ marginBottom: 12 }}>
           <h3 className="section-title">Audits assignés</h3>
         </div>
-        {loading && <div className="muted">Chargement...</div>}
         {error && <div style={{ color: "#b91c1c" }}>{error}</div>}
+        {assignError && <div style={{ color: "#b91c1c" }}>{assignError}</div>}
         <table className="table">
           <thead>
             <tr>
@@ -71,7 +87,9 @@ function AuditsPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedAssignments.map((assignment) => (
+            {initialLoading ? (
+              <TableLoadingRow colSpan={7} label="Chargement des audits..." />
+            ) : paginatedAssignments.visibleItems.map((assignment) => (
               <tr key={assignment.id}>
                 <td>{`AUD-${assignment.audit}`}</td>
                 <td>{assignment.process_name}</td>
@@ -83,19 +101,36 @@ function AuditsPage() {
                   <Link className="tag" to={`/audit-execution/${assignment.id}${assignment.status === "closed" ? "" : "?start=1"}`}>
                     {assignment.status === "closed" ? "Consulter" : "Lancer l'audit"}
                   </Link>
-                  {auth.role === "admin" && assignment.status === "closed" ? (
+                  {isQualityRole && assignment.status === "closed" ? (
                     <Link className="tag" to={`/audit-reports/${assignment.id}`}>
                       Rapport
                     </Link>
                   ) : null}
+                  {isAdmin && (
+                    <button className="tag danger-tag" type="button" onClick={() => deleteAssignment(assignment)}>
+                      Supprimer
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
+            {!initialLoading && sortedAssignments.length === 0 && (
+              <tr>
+                <td colSpan={7} className="admin-empty-row">Aucun audit assigné.</td>
+              </tr>
+            )}
           </tbody>
         </table>
+        {!initialLoading && (
+          <ShowMoreButton
+            shownCount={paginatedAssignments.shownCount}
+            totalCount={paginatedAssignments.totalCount}
+            onShowMore={paginatedAssignments.showMore}
+          />
+        )}
       </div>
 
-      {auth.role === "admin" && (
+      {isQualityRole && (
         <div className="card">
           <h4 className="section-title">Assigner un auditeur à un processus</h4>
           <form onSubmit={submitAssignment} style={{ display: "grid", gap: 10 }}>

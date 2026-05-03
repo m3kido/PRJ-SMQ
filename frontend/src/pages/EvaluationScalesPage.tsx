@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
+import { LoadingSpinner } from "../components/LoadingStates";
 
 type Scale = {
   id: number;
@@ -20,7 +21,7 @@ type Scale = {
 };
 
 function EvaluationScalesPage() {
-  const { data: scales, refetch } = useFetch<Scale[]>("/evaluation-scales/");
+  const { data: scales, loading: scalesLoading, refetch } = useFetch<Scale[]>("/evaluation-scales/");
   const { mutate, loading, error } = useMutation();
   const [drafts, setDrafts] = useState<Record<number, { min_average: string; max_average: string }>>({});
 
@@ -60,6 +61,7 @@ function EvaluationScalesPage() {
       <div className="card panel-large scale-page-card">
         <h3 className="section-title">Échelles configurées</h3>
         <p className="muted" style={{ marginBottom: 16 }}>Les libellés par défaut restent fixes. Seuls les seuils minimum et maximum sont modifiables.</p>
+        {scalesLoading && !scales && <LoadingSpinner label="Chargement des échelles..." />}
         {(scales ?? []).map((scale) => (
           <div key={scale.id} className="scale-block">
             <div className="scale-block-head">

@@ -5,6 +5,7 @@ import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
 import { formatDate } from "../utils/date";
 import BpmnDiagram from "../components/BpmnDiagram";
+import { LoadingCard } from "../components/LoadingStates";
 import { labelizeSheetKey, sortSheetEntries } from "../utils/sheetLabels";
 
 type SheetValue = string | number | boolean | null | SheetValue[] | { [key: string]: SheetValue };
@@ -331,7 +332,7 @@ function ProcessSheetDetailPage() {
         <div><Link className="tag" to="/">Retour</Link></div>
       </div>
 
-      {loading && <div className="card muted">Chargement...</div>}
+      {loading && !data && <LoadingCard title="Chargement de la fiche" description="Préparation des sections et du modèle BPMN..." />}
       {error && <div className="card" style={{ color: "#b91c1c" }}>{error}</div>}
 
       {data?.sheet_data && (editing && canEdit ? (

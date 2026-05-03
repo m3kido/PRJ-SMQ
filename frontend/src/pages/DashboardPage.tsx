@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import SortableHeader from "../components/SortableHeader";
+import { ShowMoreButton, useShowMoreList } from "../components/ShowMoreList";
 import { sortItems, SortConfig } from "../utils/tableSort";
 
 const urgent = [
@@ -31,6 +32,8 @@ const urgentSortAccessors = {
 function DashboardPage() {
   const [urgentSort, setUrgentSort] = useState<SortConfig>(null);
   const sortedUrgent = useMemo(() => sortItems(urgent, urgentSort, urgentSortAccessors), [urgentSort]);
+  const paginatedUrgent = useShowMoreList(sortedUrgent, [urgentSort?.key, urgentSort?.direction, sortedUrgent.length]);
+  const paginatedActivity = useShowMoreList(activity, [activity.length]);
 
   return (
     <div className="dashboard-stack">
@@ -87,7 +90,7 @@ function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedUrgent.map((item) => (
+              {paginatedUrgent.visibleItems.map((item) => (
                 <tr key={item.ref}>
                   <td>{item.ref}</td>
                   <td>{item.process}</td>
@@ -99,12 +102,17 @@ function DashboardPage() {
               ))}
             </tbody>
           </table>
+          <ShowMoreButton
+            shownCount={paginatedUrgent.shownCount}
+            totalCount={paginatedUrgent.totalCount}
+            onShowMore={paginatedUrgent.showMore}
+          />
         </div>
 
         <div className="card panel-side">
           <h3 className="section-title">Flux d'Activité</h3>
           <div className="activity">
-            {activity.map((a, idx) => (
+            {paginatedActivity.visibleItems.map((a, idx) => (
               <div key={idx} className="activity-item">
                 <div className="muted" style={{ fontSize: 12 }}>{a.time}</div>
                 <div style={{ fontWeight: 600 }}>{a.title}</div>
@@ -112,6 +120,11 @@ function DashboardPage() {
               </div>
             ))}
           </div>
+          <ShowMoreButton
+            shownCount={paginatedActivity.shownCount}
+            totalCount={paginatedActivity.totalCount}
+            onShowMore={paginatedActivity.showMore}
+          />
         </div>
       </div>
     </div>

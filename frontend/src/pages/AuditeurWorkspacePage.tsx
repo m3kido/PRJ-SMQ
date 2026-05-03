@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { useFetch } from "../hooks/useFetch";
 import { formatDate } from "../utils/date";
 import SortableHeader from "../components/SortableHeader";
+import { TableLoadingRow } from "../components/LoadingStates";
+import { ShowMoreButton, useShowMoreList } from "../components/ShowMoreList";
 import { sortItems, SortConfig } from "../utils/tableSort";
 
 type AuditAssignment = {
@@ -19,9 +21,11 @@ const auditSortAccessors = {
 };
 
 function AuditeurWorkspacePage() {
-  const { data: assignments } = useFetch<AuditAssignment[]>("/audit-assignments/");
+  const { data: assignments, loading } = useFetch<AuditAssignment[]>("/audit-assignments/");
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const sortedAssignments = useMemo(() => sortItems(assignments ?? [], sortConfig, auditSortAccessors), [assignments, sortConfig]);
+  const initialLoading = loading && !assignments;
+  const paginatedAssignments = useShowMoreList(sortedAssignments, [sortConfig?.key, sortConfig?.direction, sortedAssignments.length]);
 
   return (
     <div className="dashboard-stack">
@@ -49,7 +53,9 @@ function AuditeurWorkspacePage() {
             </tr>
           </thead>
           <tbody>
-            {sortedAssignments.map((item) => (
+            {initialLoading ? (
+              <TableLoadingRow colSpan={4} label="Chargement des audits..." />
+            ) : paginatedAssignments.visibleItems.map((item) => (
               <tr key={item.id}>
                 <td>{item.process_name}</td>
                 <td>{formatDate(item.due_date)}</td>
@@ -61,8 +67,20 @@ function AuditeurWorkspacePage() {
                 </td>
               </tr>
             ))}
+            {!initialLoading && sortedAssignments.length === 0 && (
+              <tr>
+                <td colSpan={4} className="admin-empty-row">Aucun audit assigné.</td>
+              </tr>
+            )}
           </tbody>
         </table>
+        {!initialLoading && (
+          <ShowMoreButton
+            shownCount={paginatedAssignments.shownCount}
+            totalCount={paginatedAssignments.totalCount}
+            onShowMore={paginatedAssignments.showMore}
+          />
+        )}
       </div>
     </div>
   );

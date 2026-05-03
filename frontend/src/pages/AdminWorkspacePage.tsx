@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import type { CSSProperties } from "react";
 import { useMemo } from "react";
 import { useFetch } from "../hooks/useFetch";
+import { LoadingCard } from "../components/LoadingStates";
+import { ShowMoreButton, useShowMoreList } from "../components/ShowMoreList";
 import { formatDateTime } from "../utils/date";
 
 type Alert = {
@@ -70,13 +72,13 @@ function percent(part: number, total: number) {
 }
 
 function AdminWorkspacePage() {
-  const { data: alerts } = useFetch<Alert[]>("/deadline-alerts/");
-  const { data: sheets } = useFetch<ManagedSheet[]>("/managed-process-sheets/");
-  const { data: audits } = useFetch<AuditAssignment[]>("/audit-assignments/");
-  const { data: nonConformities } = useFetch<NonConformity[]>("/non-conformities/");
-  const { data: processes } = useFetch<Process[]>("/processes/");
-  const { data: results } = useFetch<ComputedResult[]>("/audit-computed-results/");
-  const { data: actions } = useFetch<CorrectiveAction[]>("/actions/");
+  const { data: alerts, loading: alertsLoading } = useFetch<Alert[]>("/deadline-alerts/");
+  const { data: sheets, loading: sheetsLoading } = useFetch<ManagedSheet[]>("/managed-process-sheets/");
+  const { data: audits, loading: auditsLoading } = useFetch<AuditAssignment[]>("/audit-assignments/");
+  const { data: nonConformities, loading: nonConformitiesLoading } = useFetch<NonConformity[]>("/non-conformities/");
+  const { data: processes, loading: processesLoading } = useFetch<Process[]>("/processes/");
+  const { data: results, loading: resultsLoading } = useFetch<ComputedResult[]>("/audit-computed-results/");
+  const { data: actions, loading: actionsLoading } = useFetch<CorrectiveAction[]>("/actions/");
 
   const activeAlerts = (alerts ?? []).filter((alert) => !alert.resolved);
   const activeNCs = (nonConformities ?? []).filter((item) => item.status !== "resolue");
@@ -136,8 +138,7 @@ function AdminWorkspacePage() {
     .sort((left, right) => {
       if (right.ncCount !== left.ncCount) return right.ncCount - left.ncCount;
       return (left.rate ?? -1) - (right.rate ?? -1);
-    })
-    .slice(0, 6), [activeNCs, latestResultByProcess, processes]);
+    }), [activeNCs, latestResultByProcess, processes]);
 
   const maxSeverity = Math.max(criticalNCs, majorNCs, minorNCs, 1);
   const severityBreakdown: Array<{ label: string; value: number; tone: string }> = [
@@ -145,6 +146,34 @@ function AdminWorkspacePage() {
     { label: "Majeures", value: majorNCs, tone: "majeure" },
     { label: "Mineures", value: minorNCs, tone: "mineure" },
   ];
+  const dashboardSources: Array<[boolean, unknown]> = [
+    [alertsLoading, alerts],
+    [sheetsLoading, sheets],
+    [auditsLoading, audits],
+    [nonConformitiesLoading, nonConformities],
+    [processesLoading, processes],
+    [resultsLoading, results],
+    [actionsLoading, actions],
+  ];
+  const dashboardInitialLoading = dashboardSources.some(([isLoading, value]) => isLoading && !value);
+  const paginatedProcessReadiness = useShowMoreList(processReadiness, [processReadiness.length]);
+  const paginatedActiveNCs = useShowMoreList(activeNCs, [activeNCs.length]);
+  const paginatedActiveAlerts = useShowMoreList(activeAlerts, [activeAlerts.length]);
+
+  if (dashboardInitialLoading) {
+    return (
+      <div className="dashboard-stack admin-iso-dashboard">
+        <section className="dashboard-hero admin-priority-hero">
+          <div>
+            <div className="eyebrow">Objectif ISO 9001</div>
+            <h1 className="dashboard-title">Préparation du tableau de bord</h1>
+            <p className="dashboard-copy">Chargement des processus, audits, actions et non-conformités pour calculer la priorité qualité.</p>
+          </div>
+        </section>
+        <LoadingCard title="Chargement des indicateurs ISO" description="Calcul de la conformité et des priorités..." lines={4} />
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-stack admin-iso-dashboard">
@@ -192,7 +221,7 @@ function AdminWorkspacePage() {
             <span className="tag">Risque ISO 9001</span>
           </div>
           <div className="process-readiness-list">
-            {processReadiness.map((item) => (
+            {paginatedProcessReadiness.visibleItems.map((item) => (
               <div key={item.process.id} className="process-readiness-row">
                 <div>
                   <Link to={`/processes/${item.process.id}`}><strong>{item.process.name}</strong></Link>
@@ -209,6 +238,11 @@ function AdminWorkspacePage() {
               </div>
             ))}
           </div>
+          <ShowMoreButton
+            shownCount={paginatedProcessReadiness.shownCount}
+            totalCount={paginatedProcessReadiness.totalCount}
+            onShowMore={paginatedProcessReadiness.showMore}
+          />
         </div>
 
         <div className="card admin-chart-card">
@@ -234,7 +268,7 @@ function AdminWorkspacePage() {
             <Link className="tag" to="/non-conformities">Tout voir</Link>
           </div>
           <div className="activity">
-            {activeNCs.slice(0, 5).map((nc) => (
+            {paginatedActiveNCs.visibleItems.map((nc) => (
               <div key={nc.id} className="activity-item">
                 <div style={{ fontWeight: 700 }}>{nc.process_name ?? `Processus ${nc.process}`}</div>
                 <div className="muted">{nc.criterion_title || nc.description}</div>
@@ -243,6 +277,11 @@ function AdminWorkspacePage() {
             ))}
             {!activeNCs.length && <div className="muted">Aucune non-conformité ouverte.</div>}
           </div>
+          <ShowMoreButton
+            shownCount={paginatedActiveNCs.shownCount}
+            totalCount={paginatedActiveNCs.totalCount}
+            onShowMore={paginatedActiveNCs.showMore}
+          />
         </div>
 
         <div className="card">
@@ -251,7 +290,7 @@ function AdminWorkspacePage() {
             <span className="tag">{activeAlerts.length} active(s)</span>
           </div>
           <div className="activity">
-            {activeAlerts.slice(0, 5).map((alert) => (
+            {paginatedActiveAlerts.visibleItems.map((alert) => (
               <div key={alert.id} className="activity-item">
                 <div className="muted" style={{ fontSize: 12 }}>{formatDateTime(alert.created_at)}</div>
                 <div style={{ fontWeight: 700 }}>{alert.alert_type}</div>
@@ -260,6 +299,11 @@ function AdminWorkspacePage() {
             ))}
             {!activeAlerts.length && <div className="muted">Aucune alerte active.</div>}
           </div>
+          <ShowMoreButton
+            shownCount={paginatedActiveAlerts.shownCount}
+            totalCount={paginatedActiveAlerts.totalCount}
+            onShowMore={paginatedActiveAlerts.showMore}
+          />
         </div>
       </div>
 

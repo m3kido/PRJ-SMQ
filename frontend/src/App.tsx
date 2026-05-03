@@ -23,8 +23,10 @@ import { useAuth } from "./context/AuthContext";
 function App() {
   const { auth } = useAuth();
   const isAuthed = Boolean(auth.accessToken);
+  const isAdmin = auth.role === "admin";
+  const isQualityRole = auth.role === "admin" || auth.role === "responsable_qualite";
   const roleHome =
-    auth.role === "admin"
+    isQualityRole
       ? <AdminWorkspacePage />
       : auth.role === "gestionnaire"
         ? <GestionnaireWorkspacePage />
@@ -49,7 +51,7 @@ function App() {
                 <Route path="/actions/:id" element={<ActionDetailPage />} />
                 <Route path="/criteria" element={<CriteriaManagementPage />} />
                 <Route path="/evaluation-scales" element={<EvaluationScalesPage />} />
-                <Route path="/administration" element={<AdministrationPage />} />
+                <Route path="/administration" element={isAdmin ? <AdministrationPage /> : <Navigate to="/" replace />} />
                 <Route path="/processes/:id" element={<ProcessDetailPage />} />
                 <Route path="/process-sheets/:id" element={<ProcessSheetDetailPage />} />
                 <Route path="/audit-execution/:id" element={<AuditExecutionPage />} />

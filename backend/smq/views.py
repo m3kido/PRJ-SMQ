@@ -1,12 +1,20 @@
 from rest_framework import viewsets, status
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.utils import timezone
 from django.db.models import Q
 from decimal import Decimal
 
-from .auth import IsAdmin, IsAuditeurInterne, IsAuditeurExterne, IsGestionnaire, ReadOnly
+from .auth import (
+    AdminDeleteOnly,
+    IsAdmin,
+    IsAdminOrResponsableQualite,
+    IsAuditeurInterne,
+    IsAuditeurExterne,
+    IsGestionnaire,
+    ReadOnly,
+)
 
 from .models import (
     Department,
@@ -70,15 +78,15 @@ def build_auto_nonconformity_reference(process_id, criterion_id):
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):
-    queryset = Department.objects.all()
+    queryset = Department.objects.all().order_by("name")
     serializer_class = DepartmentSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdmin | ReadOnly), AdminDeleteOnly]
 
 
 class ProcessViewSet(viewsets.ModelViewSet):
     queryset = Process.objects.all().select_related("owner", "department")
     serializer_class = ProcessSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsGestionnaire | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsGestionnaire | ReadOnly), AdminDeleteOnly]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -94,19 +102,19 @@ class ProcessViewSet(viewsets.ModelViewSet):
 class ProcessDocumentViewSet(viewsets.ModelViewSet):
     queryset = ProcessDocument.objects.all().select_related("process")
     serializer_class = ProcessDocumentSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsGestionnaire | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsGestionnaire | ReadOnly), AdminDeleteOnly]
 
 
 class AuditViewSet(viewsets.ModelViewSet):
     queryset = Audit.objects.all().select_related("department", "created_by").prefetch_related("processes", "team")
     serializer_class = AuditSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | IsAuditeurExterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | IsAuditeurExterne | ReadOnly), AdminDeleteOnly]
 
 
 class NonConformityViewSet(viewsets.ModelViewSet):
     queryset = NonConformity.objects.all().select_related("process", "audit")
     serializer_class = NonConformitySerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | ReadOnly), AdminDeleteOnly]
 
     def get_queryset(self):
         qs = super().get_queryset().select_related("process", "audit", "criterion")
@@ -128,7 +136,7 @@ class NonConformityViewSet(viewsets.ModelViewSet):
 class CorrectiveActionViewSet(viewsets.ModelViewSet):
     queryset = CorrectiveAction.objects.all().select_related("process", "process__owner", "non_conformity", "assignee")
     serializer_class = CorrectiveActionSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | ReadOnly), AdminDeleteOnly]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -141,19 +149,19 @@ class CorrectiveActionViewSet(viewsets.ModelViewSet):
 class NotificationViewSet(viewsets.ModelViewSet):
     queryset = Notification.objects.all().select_related("recipient")
     serializer_class = NotificationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminDeleteOnly]
 
 
 class KpiViewSet(viewsets.ModelViewSet):
     queryset = Kpi.objects.all().select_related("related_process")
     serializer_class = KpiSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | ReadOnly), AdminDeleteOnly]
 
 
 class ProcessSheetTemplateViewSet(viewsets.ModelViewSet):
     queryset = ProcessSheetTemplate.objects.all()
     serializer_class = ProcessSheetTemplateSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | ReadOnly), AdminDeleteOnly]
 
 
 class ManagedProcessSheetViewSet(viewsets.ModelViewSet):
@@ -161,7 +169,7 @@ class ManagedProcessSheetViewSet(viewsets.ModelViewSet):
         "process", "template", "assigned_manager", "assigned_by"
     )
     serializer_class = ManagedProcessSheetSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsGestionnaire | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsGestionnaire | ReadOnly), AdminDeleteOnly]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -191,13 +199,13 @@ class ManagedProcessSheetViewSet(viewsets.ModelViewSet):
 class IsoClauseViewSet(viewsets.ModelViewSet):
     queryset = IsoClause.objects.all().prefetch_related("criteria")
     serializer_class = IsoClauseSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | ReadOnly), AdminDeleteOnly]
 
 
 class IsoCriterionViewSet(viewsets.ModelViewSet):
     queryset = IsoCriterion.objects.all().select_related("clause")
     serializer_class = IsoCriterionSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | ReadOnly), AdminDeleteOnly]
 
 
 class AuditAssignmentViewSet(viewsets.ModelViewSet):
@@ -205,7 +213,7 @@ class AuditAssignmentViewSet(viewsets.ModelViewSet):
         "audit", "process", "assigned_auditor", "assigned_by"
     )
     serializer_class = AuditAssignmentSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | IsAuditeurExterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | IsAuditeurExterne | ReadOnly), AdminDeleteOnly]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -380,7 +388,7 @@ class AuditAssignmentViewSet(viewsets.ModelViewSet):
 class AuditCriterionAssessmentViewSet(viewsets.ModelViewSet):
     queryset = AuditCriterionAssessment.objects.all().select_related("assignment", "criterion")
     serializer_class = AuditCriterionAssessmentSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | IsAuditeurExterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | IsAuditeurExterne | ReadOnly), AdminDeleteOnly]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -419,7 +427,7 @@ class AuditCriterionAssessmentViewSet(viewsets.ModelViewSet):
 class AuditEvidenceViewSet(viewsets.ModelViewSet):
     queryset = AuditEvidence.objects.all().select_related("assessment", "created_by")
     serializer_class = AuditEvidenceSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | IsAuditeurExterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | IsAuditeurExterne | ReadOnly), AdminDeleteOnly]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -443,7 +451,7 @@ class AuditEvidenceViewSet(viewsets.ModelViewSet):
 class DeadlineAlertViewSet(viewsets.ModelViewSet):
     queryset = DeadlineAlert.objects.all().select_related("admin", "process_sheet", "audit_assignment")
     serializer_class = DeadlineAlertSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | ReadOnly), AdminDeleteOnly]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -477,13 +485,13 @@ class DeadlineAlertViewSet(viewsets.ModelViewSet):
 class EvaluationScaleViewSet(viewsets.ModelViewSet):
     queryset = EvaluationScale.objects.all().prefetch_related("levels")
     serializer_class = EvaluationScaleSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | IsAuditeurExterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | IsAuditeurExterne | ReadOnly), AdminDeleteOnly]
 
 
 class EvaluationScaleLevelViewSet(viewsets.ModelViewSet):
     queryset = EvaluationScaleLevel.objects.all().select_related("scale")
     serializer_class = EvaluationScaleLevelSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | IsAuditeurExterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | IsAuditeurExterne | ReadOnly), AdminDeleteOnly]
 
     http_method_names = ["get", "patch", "head", "options"]
 
@@ -491,12 +499,12 @@ class EvaluationScaleLevelViewSet(viewsets.ModelViewSet):
 class AuditComputedResultViewSet(viewsets.ModelViewSet):
     queryset = AuditComputedResult.objects.all().select_related("assignment")
     serializer_class = AuditComputedResultSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | IsAuditeurExterne | ReadOnly)]
+    permission_classes = [IsAuthenticated & (IsAdminOrResponsableQualite | IsAuditeurInterne | IsAuditeurExterne | ReadOnly), AdminDeleteOnly]
 
 
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all().select_related("profile")
-    permission_classes = [IsAuthenticated & (IsAdmin | ReadOnly)]
+    queryset = User.objects.all().select_related("profile", "profile__department").order_by("username")
+    permission_classes = [IsAuthenticated & (IsAdmin | ReadOnly), AdminDeleteOnly]
 
     def get_serializer_class(self):
         if self.request.method in ["POST", "PUT", "PATCH"]:
