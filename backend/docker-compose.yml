@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smq}
+      POSTGRES_USER: ${POSTGRES_USER:-smq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smq}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: .
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8500"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret-key-change-me}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-*}
+      POSTGRES_DB: ${POSTGRES_DB:-smq}
+      POSTGRES_USER: ${POSTGRES_USER:-smq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smq}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    ports:
+      - "8500:8500"
+
+volumes:
+  pgdata:
