@@ -460,6 +460,74 @@ a {
   gap: 6px;
 }
 
+.sheet-editor-group,
+.sheet-editor-subgroup {
+  display: grid;
+  gap: 12px;
+}
+
+.sheet-editor-subgroup {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fcfaf7;
+}
+
+.sheet-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.sheet-editor-field {
+  display: grid;
+  gap: 6px;
+}
+
+.sheet-editor-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sheet-editor-input,
+.sheet-editor-textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  padding: 10px 12px;
+}
+
+.sheet-editor-textarea {
+  min-height: 86px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.sheet-editor-list {
+  display: grid;
+  gap: 10px;
+}
+
+.sheet-editor-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.sheet-editor-remove {
+  margin-top: 22px;
+}
+
 .compact-form-card .card,
 .compact-form-card > * {
   box-shadow: none;

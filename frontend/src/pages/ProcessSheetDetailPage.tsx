@@ -4,6 +4,9 @@ import { useAuth } from "../context/AuthContext";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
 
+type SheetValue = string | number | boolean | null | SheetValue[] | { [key: string]: SheetValue };
+type SheetData = Record<string, SheetValue>;
+
 type ProcessSheet = {
   id: number;
   process_name: string;
@@ -13,23 +16,58 @@ type ProcessSheet = {
   sheet_data: Record<string, unknown>;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeValue(value: unknown): SheetValue {
+  if (Array.isArray(value)) {
+    return value.map(normalizeValue);
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, normalizeValue(nested)]));
+  }
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "string" || value === null) {
+    return value;
+  }
+  return value == null ? "" : String(value);
+}
+
+function normalizeSheetData(value: Record<string, unknown>): SheetData {
+  return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, normalizeValue(nested)]));
+}
+
+function labelize(value: string) {
+  return value.replace(/_/g, " ");
+}
+
+function makeEmptyLike(value: SheetValue): SheetValue {
+  if (Array.isArray(value)) return [];
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, makeEmptyLike(nested)]));
+  }
+  if (typeof value === "number") return 0;
+  if (typeof value === "boolean") return false;
+  return "";
+}
+
 function renderValue(value: unknown) {
   if (Array.isArray(value)) {
     return (
       <ul className="fiche-list">
         {value.map((item, index) => (
-          <li key={index}>{typeof item === "object" ? JSON.stringify(item) : String(item)}</li>
+          <li key={index}>{isRecord(item) || Array.isArray(item) ? renderValue(item) : String(item)}</li>
         ))}
       </ul>
     );
   }
 
-  if (value && typeof value === "object") {
+  if (isRecord(value)) {
     return (
       <div className="fiche-grid">
-        {Object.entries(value as Record<string, unknown>).map(([key, nested]) => (
+        {Object.entries(value).map(([key, nested]) => (
           <div key={key} className="fiche-item fiche-item-block">
-            <div className="fiche-label">{key.replace(/_/g, " ")}</div>
+            <div className="fiche-label">{labelize(key)}</div>
             <div className="fiche-content">{renderValue(nested)}</div>
           </div>
         ))}
@@ -40,36 +78,121 @@ function renderValue(value: unknown) {
   return <div className="fiche-text">{String(value ?? "")}</div>;
 }
 
+type SheetValueEditorProps = {
+  fieldKey: string;
+  value: SheetValue;
+  onChange: (value: SheetValue) => void;
+  level?: number;
+};
+
+function SheetValueEditor({ fieldKey, value, onChange, level = 0 }: SheetValueEditorProps) {
+  const label = labelize(fieldKey);
+
+  if (Array.isArray(value)) {
+    const addItem = () => {
+      const template = value[0] ?? "";
+      onChange([...value, makeEmptyLike(template)]);
+    };
+
+    return (
+      <div className="sheet-editor-field">
+        <div className="sheet-editor-label-row">
+          <label className="fiche-label">{label}</label>
+          <button type="button" className="tag" onClick={addItem}>Ajouter</button>
+        </div>
+        <div className="sheet-editor-list">
+          {value.map((item, index) => (
+            <div key={index} className="sheet-editor-list-item">
+              <SheetValueEditor
+                fieldKey={`${label} ${index + 1}`}
+                value={item}
+                level={level + 1}
+                onChange={(nextItem) => onChange(value.map((current, currentIndex) => currentIndex === index ? nextItem : current))}
+              />
+              <button
+                type="button"
+                className="tag sheet-editor-remove"
+                onClick={() => onChange(value.filter((_, currentIndex) => currentIndex !== index))}
+              >
+                Retirer
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (value && typeof value === "object") {
+    return (
+      <div className={level === 0 ? "sheet-editor-group" : "sheet-editor-subgroup"}>
+        <div className="fiche-label">{label}</div>
+        <div className="sheet-editor-grid">
+          {Object.entries(value).map(([key, nested]) => (
+            <SheetValueEditor
+              key={key}
+              fieldKey={key}
+              value={nested}
+              level={level + 1}
+              onChange={(nextNested) => onChange({ ...value, [key]: nextNested })}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (typeof value === "boolean") {
+    return (
+      <label className="sheet-editor-field">
+        <span className="fiche-label">{label}</span>
+        <select className="sheet-editor-input" value={String(value)} onChange={(e) => onChange(e.target.value === "true")}>
+          <option value="true">Oui</option>
+          <option value="false">Non</option>
+        </select>
+      </label>
+    );
+  }
+
+  if (typeof value === "number") {
+    return (
+      <label className="sheet-editor-field">
+        <span className="fiche-label">{label}</span>
+        <input className="sheet-editor-input" type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      </label>
+    );
+  }
+
+  return (
+    <label className="sheet-editor-field">
+      <span className="fiche-label">{label}</span>
+      <textarea
+        className="sheet-editor-textarea"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
+
 function ProcessSheetDetailPage() {
   const { id } = useParams();
   const { auth } = useAuth();
   const { data, loading, error, refetch } = useFetch<ProcessSheet>(`/managed-process-sheets/${id}/`, [id]);
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [draft, setDraft] = useState<SheetData>({});
 
   useEffect(() => {
     if (data?.sheet_data) {
-      const nextDraft: Record<string, string> = {};
-      Object.entries(data.sheet_data).forEach(([section, value]) => {
-        nextDraft[section] = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-      });
-      setDraft(nextDraft);
+      setDraft(normalizeSheetData(data.sheet_data));
     }
   }, [data]);
 
   const saveSheet = async (status: "draft" | "submitted") => {
     if (!data) return;
-    const nextData: Record<string, unknown> = {};
-    Object.entries(draft).forEach(([section, raw]) => {
-      try {
-        nextData[section] = JSON.parse(raw);
-      } catch {
-        nextData[section] = raw;
-      }
-    });
     await mutate("patch", `/managed-process-sheets/${data.id}/`, {
-      sheet_data: nextData,
+      sheet_data: draft,
       status,
     });
     setEditing(false);
@@ -108,12 +231,12 @@ function ProcessSheetDetailPage() {
         <div className="card">
           {Object.entries(data.sheet_data).map(([section, value]) => (
             <section key={section} className="fiche-section">
-              <h3 className="section-title">{section.replace(/_/g, " ")}</h3>
+              <h3 className="section-title">{labelize(section)}</h3>
               {editing && auth.role === "gestionnaire" ? (
-                <textarea
-                  value={draft[section] ?? ""}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, [section]: e.target.value }))}
-                  style={{ width: "100%", minHeight: 180, padding: 12, borderRadius: 12, border: "1px solid #e5e7eb", fontFamily: "monospace" }}
+                <SheetValueEditor
+                  fieldKey={section}
+                  value={draft[section] ?? normalizeValue(value)}
+                  onChange={(nextSection) => setDraft((prev) => ({ ...prev, [section]: nextSection }))}
                 />
               ) : (
                 renderValue(value)
