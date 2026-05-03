@@ -33,15 +33,30 @@ type AuditAssignment = {
 
 function renderBlock(value: unknown) {
   if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return <div className="fiche-text muted">-</div>;
+    }
+    if (value.some((item) => typeof item === "object" && item)) {
+      return (
+        <div className="process-detail-list-grid">
+          {value.map((item, idx) => (
+            <div key={idx} className="fiche-item fiche-item-block">
+              <div className="fiche-label">Élément {idx + 1}</div>
+              {renderBlock(item)}
+            </div>
+          ))}
+        </div>
+      );
+    }
     return (
       <ul className="fiche-list">
-        {value.map((item, idx) => <li key={idx}>{typeof item === "object" && item ? renderBlock(item) : String(item)}</li>)}
+        {value.map((item, idx) => <li key={idx}>{String(item || "-")}</li>)}
       </ul>
     );
   }
   if (value && typeof value === "object") {
     return (
-      <div className="fiche-grid">
+      <div className="fiche-grid process-detail-grid">
         {sortSheetEntries(Object.entries(value as Record<string, unknown>)).map(([key, nested]) => (
           <div key={key} className="fiche-item fiche-item-block">
             <div className="fiche-label">{labelizeSheetKey(key)}</div>
@@ -51,21 +66,22 @@ function renderBlock(value: unknown) {
       </div>
     );
   }
-  return <div className="fiche-text">{String(value ?? "")}</div>;
+  const text = String(value ?? "").trim();
+  return <div className={`fiche-text ${text ? "" : "muted"}`}>{text || "-"}</div>;
 }
 
 function ProcessDetailPage() {
   const { id } = useParams();
   const { auth } = useAuth();
   const { data: process, loading, error } = useFetch<Process>(`/processes/${id}/`, [id]);
-  const { data: sheets } = useFetch<ManagedSheet[]>("/managed-process-sheets/");
-  const { data: assignments } = useFetch<AuditAssignment[]>("/audit-assignments/");
+  const { data: sheets } = useFetch<ManagedSheet[]>(id ? `/managed-process-sheets/?process=${id}` : "/managed-process-sheets/?process=0", [id]);
+  const { data: assignments } = useFetch<AuditAssignment[]>(id ? `/audit-assignments/?process=${id}` : "/audit-assignments/?process=0", [id]);
 
-  const sheet = (sheets ?? []).find((item) => String(item.process) === String(id));
-  const currentAssignment = (assignments ?? []).find((item) => String(item.process) === String(id) && item.status !== "closed");
+  const sheet = (sheets ?? []).find((item) => item.status === "validated" || item.status === "submitted") ?? sheets?.[0] ?? null;
+  const currentAssignment = (assignments ?? []).find((item) => item.status !== "closed");
 
   return (
-    <div className="dashboard-stack">
+    <div className="dashboard-stack process-detail-page">
       <section className="dashboard-hero">
         <div>
           <div className="eyebrow">Processus</div>
@@ -83,7 +99,7 @@ function ProcessDetailPage() {
         <div><strong>Responsable:</strong> {process?.owner_username ?? "-"}</div>
         <div><strong>Type:</strong> {process?.type ?? "-"}</div>
         {auth.role === "auditeur_interne" && currentAssignment && (
-          <Link className="btn-primary" to={`/audit-execution/${currentAssignment.id}`}>Lancer l'audit</Link>
+          <Link className="btn-primary" to={`/audit-execution/${currentAssignment.id}?start=1`}>Lancer l'audit</Link>
         )}
       </div>
 
@@ -97,16 +113,20 @@ function ProcessDetailPage() {
         </div>
       )}
 
-      {sheet?.sheet_data && (
-        <div className="card">
+      {sheet?.sheet_data ? (
+        <div className="card process-detail-card">
           <h3 className="section-title">Fiche processus</h3>
-          {sortSheetEntries(Object.entries(sheet.sheet_data)).map(([section, value]) => (
-            <section key={section} className="fiche-section">
-              <h3 className="section-title">{labelizeSheetKey(section)}</h3>
-              {renderBlock(value)}
-            </section>
-          ))}
+          <div className="process-detail-sheet">
+            {sortSheetEntries(Object.entries(sheet.sheet_data)).map(([section, value]) => (
+              <section key={section} className="fiche-section process-detail-section">
+                <h3 className="section-title">{labelizeSheetKey(section)}</h3>
+                <div className="process-detail-section-content">{renderBlock(value)}</div>
+              </section>
+            ))}
+          </div>
         </div>
+      ) : !loading && (
+        <div className="card muted">Aucune fiche processus n'est encore associée à ce processus.</div>
       )}
 
       {process && (

@@ -1,3 +1,7 @@
+import { useMemo, useState } from "react";
+import SortableHeader from "../components/SortableHeader";
+import { sortItems, SortConfig } from "../utils/tableSort";
+
 const urgent = [
   { ref: "NC-2024-001", process: "Production (Ligne B)", date: "14/03/2024", severity: "critique" },
   { ref: "NC-2024-005", process: "Ressources Humaines", date: "12/03/2024", severity: "majeure" },
@@ -17,7 +21,17 @@ const activity = [
   },
 ];
 
+const urgentSortAccessors = {
+  ref: (item: typeof urgent[number]) => item.ref,
+  process: (item: typeof urgent[number]) => item.process,
+  date: (item: typeof urgent[number]) => item.date,
+  severity: (item: typeof urgent[number]) => item.severity,
+};
+
 function DashboardPage() {
+  const [urgentSort, setUrgentSort] = useState<SortConfig>(null);
+  const sortedUrgent = useMemo(() => sortItems(urgent, urgentSort, urgentSortAccessors), [urgentSort]);
+
   return (
     <div className="dashboard-stack">
       <section className="dashboard-hero">
@@ -66,14 +80,14 @@ function DashboardPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>Référence</th>
-                <th>Processus</th>
-                <th>Date</th>
-                <th>Sévérité</th>
+                <SortableHeader label="Référence" sortKey="ref" sortConfig={urgentSort} onSort={(key, direction) => setUrgentSort({ key, direction })} />
+                <SortableHeader label="Processus" sortKey="process" sortConfig={urgentSort} onSort={(key, direction) => setUrgentSort({ key, direction })} />
+                <SortableHeader label="Date" sortKey="date" sortConfig={urgentSort} onSort={(key, direction) => setUrgentSort({ key, direction })} />
+                <SortableHeader label="Sévérité" sortKey="severity" sortConfig={urgentSort} onSort={(key, direction) => setUrgentSort({ key, direction })} />
               </tr>
             </thead>
             <tbody>
-              {urgent.map((item) => (
+              {sortedUrgent.map((item) => (
                 <tr key={item.ref}>
                   <td>{item.ref}</td>
                   <td>{item.process}</td>

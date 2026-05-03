@@ -130,6 +130,13 @@ class CorrectiveActionViewSet(viewsets.ModelViewSet):
     serializer_class = CorrectiveActionSerializer
     permission_classes = [IsAuthenticated & (IsAdmin | IsAuditeurInterne | ReadOnly)]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        profile = getattr(self.request.user, "profile", None)
+        if profile and profile.role == "gestionnaire":
+            qs = qs.filter(process__owner=self.request.user)
+        return qs.order_by("-updated_at", "-created_at")
+
 
 class NotificationViewSet(viewsets.ModelViewSet):
     queryset = Notification.objects.all().select_related("recipient")

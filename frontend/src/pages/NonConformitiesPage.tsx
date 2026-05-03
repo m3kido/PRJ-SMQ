@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useFetch } from "../hooks/useFetch";
 import NonConformityForm from "../components/NonConformityForm";
 import NonConformityEditModal from "../components/NonConformityEditModal";
+import SortableHeader from "../components/SortableHeader";
+import { sortItems, SortConfig } from "../utils/tableSort";
 
 type NC = {
   id: number;
@@ -16,10 +18,19 @@ type NC = {
   description: string;
 };
 
+const ncSortAccessors = {
+  process: (item: NC) => item.process_name,
+  criterion: (item: NC) => item.criterion_title,
+  severity: (item: NC) => item.severity,
+  description: (item: NC) => item.description,
+};
+
 function NonConformitiesPage() {
   const { data, loading, error, refetch } = useFetch<NC[]>("/non-conformities/?active=true");
   const ncs = data ?? [];
   const [editing, setEditing] = useState<NC | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig>(null);
+  const sortedNCs = useMemo(() => sortItems(ncs, sortConfig, ncSortAccessors), [ncs, sortConfig]);
 
   return (
     <>
@@ -32,15 +43,15 @@ function NonConformitiesPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Processus</th>
-              <th>Critère</th>
-              <th>Sévérité</th>
-              <th>Description</th>
+              <SortableHeader label="Processus" sortKey="process" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Critère" sortKey="criterion" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Sévérité" sortKey="severity" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Description" sortKey="description" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {ncs.map((nc) => (
+            {sortedNCs.map((nc) => (
               <tr key={nc.id}>
                 <td>{nc.process_name || "-"}</td>
                 <td>{nc.criterion_title || "-"}</td>

@@ -7,7 +7,7 @@ const navItems = [
   { to: "/processes", label: "Processus", icon: "◎", roles: ["admin", "gestionnaire", "auditeur_interne", "auditeur_externe"] },
   { to: "/audits", label: "Audits", icon: "◌", roles: ["admin", "auditeur_interne", "auditeur_externe"] },
   { to: "/non-conformities", label: "Non-Conformités", icon: "△", roles: ["admin", "auditeur_interne"] },
-  { to: "/actions", label: "Actions Correctives", icon: "↗", roles: ["admin", "auditeur_interne"] },
+  { to: "/actions", label: "Actions Correctives", icon: "↗", roles: ["admin", "gestionnaire", "auditeur_interne"] },
   { to: "/criteria", label: "Critères ISO", icon: "≣", roles: ["admin", "auditeur_interne"] },
   { to: "/evaluation-scales", label: "Échelles", icon: "◍", roles: ["admin", "auditeur_interne"] },
   { to: "/administration", label: "Administration", icon: "◧", roles: ["admin"] },
@@ -43,11 +43,11 @@ function LayoutShell({ children }: { children: ReactNode }) {
         </div>
         <div className="sidebar-footer">
           <div className="sidebar-section-label">Session</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <div className="sidebar-session-row">
             {auth.avatar ? (
-              <img src={auth.avatar} alt={auth.username ?? "Utilisateur"} style={{ width: 42, height: 42, borderRadius: 999, objectFit: "cover" }} />
+              <img className="sidebar-avatar" src={auth.avatar} alt={auth.username ?? "Utilisateur"} />
             ) : (
-              <div className="user-chip">{(auth.username ?? "U").slice(0, 1).toUpperCase()}</div>
+              <div className="user-chip sidebar-session-chip">{(auth.username ?? "U").slice(0, 1).toUpperCase()}</div>
             )}
             <div className="sidebar-user">{auth.username ?? "Utilisateur"}</div>
           </div>

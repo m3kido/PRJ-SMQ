@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
 import { useAuth } from "../context/AuthContext";
 import AppDateInput from "../components/AppDateInput";
 import { formatDate } from "../utils/date";
+import SortableHeader from "../components/SortableHeader";
+import { sortItems, SortConfig } from "../utils/tableSort";
 
 type Process = {
   id: number;
@@ -27,6 +29,21 @@ type ManagedSheet = {
   status: string;
 };
 
+const processSortAccessors = {
+  name: (item: Process) => item.name,
+  department: (item: Process) => item.department_name ?? "",
+  type: (item: Process) => item.type,
+  owner: (item: Process) => item.owner_username ?? "",
+};
+
+const assignmentSortAccessors = {
+  process: (item: ManagedSheet) => item.process_name,
+  manager: (item: ManagedSheet) => item.manager_username,
+  department: (item: ManagedSheet) => item.process_department_name ?? "",
+  due_date: (item: ManagedSheet) => item.due_date,
+  status: (item: ManagedSheet) => item.status,
+};
+
 function ProcessesPage() {
   const { auth } = useAuth();
   const { data, loading, error, refetch } = useFetch<Process[]>("/processes/");
@@ -35,7 +52,11 @@ function ProcessesPage() {
   const { data: departments } = useFetch<{ id: number; name: string }[]>("/departments/");
   const { mutate, loading: assigning, error: assignError } = useMutation();
   const processes = data ?? [];
+  const [processSort, setProcessSort] = useState<SortConfig>(null);
+  const [assignmentSort, setAssignmentSort] = useState<SortConfig>(null);
   const [assignmentForm, setAssignmentForm] = useState({ process_title: "", process_department: "", process_type: "operationnel", assigned_manager: "", due_date: "" });
+  const sortedProcesses = useMemo(() => sortItems(processes, processSort, processSortAccessors), [processes, processSort]);
+  const sortedAssignments = useMemo(() => sortItems(assignments ?? [], assignmentSort, assignmentSortAccessors), [assignments, assignmentSort]);
 
   const submitAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,15 +83,15 @@ function ProcessesPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Nom</th>
-              <th>Département</th>
-              <th>Type</th>
-              <th>Responsable</th>
+              <SortableHeader label="Nom" sortKey="name" sortConfig={processSort} onSort={(key, direction) => setProcessSort({ key, direction })} />
+              <SortableHeader label="Département" sortKey="department" sortConfig={processSort} onSort={(key, direction) => setProcessSort({ key, direction })} />
+              <SortableHeader label="Type" sortKey="type" sortConfig={processSort} onSort={(key, direction) => setProcessSort({ key, direction })} />
+              <SortableHeader label="Responsable" sortKey="owner" sortConfig={processSort} onSort={(key, direction) => setProcessSort({ key, direction })} />
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {processes.map((p) => (
+            {sortedProcesses.map((p) => (
               <tr key={p.name}>
                 <td>{p.name}</td>
                 <td>{p.department_name ?? ""}</td>
@@ -91,15 +112,15 @@ function ProcessesPage() {
           <table className="table" style={{ marginBottom: 20 }}>
             <thead>
               <tr>
-                <th>Processus</th>
-                <th>Gestionnaire</th>
-                <th>Département</th>
-                <th>Échéance</th>
-                <th>Statut</th>
+                <SortableHeader label="Processus" sortKey="process" sortConfig={assignmentSort} onSort={(key, direction) => setAssignmentSort({ key, direction })} />
+                <SortableHeader label="Gestionnaire" sortKey="manager" sortConfig={assignmentSort} onSort={(key, direction) => setAssignmentSort({ key, direction })} />
+                <SortableHeader label="Département" sortKey="department" sortConfig={assignmentSort} onSort={(key, direction) => setAssignmentSort({ key, direction })} />
+                <SortableHeader label="Échéance" sortKey="due_date" sortConfig={assignmentSort} onSort={(key, direction) => setAssignmentSort({ key, direction })} />
+                <SortableHeader label="Statut" sortKey="status" sortConfig={assignmentSort} onSort={(key, direction) => setAssignmentSort({ key, direction })} />
               </tr>
             </thead>
             <tbody>
-              {(assignments ?? []).map((assignment) => (
+              {sortedAssignments.map((assignment) => (
                 <tr key={assignment.id}>
                   <td>{assignment.process_name}</td>
                   <td>{assignment.manager_username}</td>

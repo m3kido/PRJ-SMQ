@@ -15,6 +15,7 @@ import ProcessesPage from "./pages/ProcessesPage";
 import AuditsPage from "./pages/AuditsPage";
 import NonConformitiesPage from "./pages/NonConformitiesPage";
 import ActionsPage from "./pages/ActionsPage";
+import ActionDetailPage from "./pages/ActionDetailPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import LoginPage from "./pages/LoginPage";
 import { useAuth } from "./context/AuthContext";
@@ -45,6 +46,7 @@ function App() {
                 <Route path="/audits" element={<AuditsPage />} />
                 <Route path="/non-conformities" element={<NonConformitiesPage />} />
                 <Route path="/actions" element={<ActionsPage />} />
+                <Route path="/actions/:id" element={<ActionDetailPage />} />
                 <Route path="/criteria" element={<CriteriaManagementPage />} />
                 <Route path="/evaluation-scales" element={<EvaluationScalesPage />} />
                 <Route path="/administration" element={<AdministrationPage />} />

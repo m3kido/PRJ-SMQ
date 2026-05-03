@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
 import { useAuth } from "../context/AuthContext";
 import AppDateInput from "../components/AppDateInput";
 import { formatDate } from "../utils/date";
+import SortableHeader from "../components/SortableHeader";
+import { sortItems, SortConfig } from "../utils/tableSort";
 
 type AuditAssignment = {
   id: number;
@@ -17,6 +19,15 @@ type AuditAssignment = {
   status: string;
 };
 
+const auditSortAccessors = {
+  reference: (item: AuditAssignment) => item.audit,
+  process: (item: AuditAssignment) => item.process_name,
+  auditor: (item: AuditAssignment) => item.auditor_username,
+  department: (item: AuditAssignment) => item.process_department_name,
+  status: (item: AuditAssignment) => item.status,
+  due_date: (item: AuditAssignment) => item.due_date,
+};
+
 function AuditsPage() {
   const { auth } = useAuth();
   const { data, loading, error, refetch } = useFetch<AuditAssignment[]>("/audit-assignments/");
@@ -24,7 +35,9 @@ function AuditsPage() {
   const { data: users } = useFetch<{ id: number; username: string; role: string }[]>("/users/");
   const { mutate, loading: assigning, error: assignError } = useMutation();
   const assignments = data ?? [];
+  const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [assignmentForm, setAssignmentForm] = useState({ process: "", assigned_auditor: "", due_date: "" });
+  const sortedAssignments = useMemo(() => sortItems(assignments, sortConfig, auditSortAccessors), [assignments, sortConfig]);
 
   const submitAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,17 +61,17 @@ function AuditsPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Référence</th>
-              <th>Processus</th>
-              <th>Auditeur</th>
-              <th>Département</th>
-              <th>Statut</th>
-              <th>Échéance</th>
+              <SortableHeader label="Référence" sortKey="reference" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Processus" sortKey="process" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Auditeur" sortKey="auditor" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Département" sortKey="department" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Statut" sortKey="status" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Échéance" sortKey="due_date" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {assignments.map((assignment) => (
+            {sortedAssignments.map((assignment) => (
               <tr key={assignment.id}>
                 <td>{`AUD-${assignment.audit}`}</td>
                 <td>{assignment.process_name}</td>
@@ -67,7 +80,7 @@ function AuditsPage() {
                 <td>{assignment.status}</td>
                 <td>{formatDate(assignment.due_date)}</td>
                 <td className="table-actions">
-                  <Link className="tag" to={`/audit-execution/${assignment.id}`}>
+                  <Link className="tag" to={`/audit-execution/${assignment.id}${assignment.status === "closed" ? "" : "?start=1"}`}>
                     {assignment.status === "closed" ? "Consulter" : "Lancer l'audit"}
                   </Link>
                   {auth.role === "admin" && assignment.status === "closed" ? (

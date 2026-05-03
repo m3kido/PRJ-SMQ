@@ -24,6 +24,7 @@ from .models import (
     EvaluationScaleLevel,
     AuditComputedResult,
 )
+from .process_sheet_utils import make_blank_sheet_data
 
 User = get_user_model()
 
@@ -390,7 +391,7 @@ class ManagedProcessSheetSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"template": "Aucun modèle de fiche processus n'est disponible."})
 
         validated_data["template"] = template
-        validated_data["sheet_data"] = validated_data.get("sheet_data") or template.structure
+        validated_data["sheet_data"] = validated_data.get("sheet_data") or make_blank_sheet_data(template.structure)
         if request and request.user.is_authenticated:
             validated_data["assigned_by"] = request.user
         return super().create(validated_data)

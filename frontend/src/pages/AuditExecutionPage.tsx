@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
 import { formatDate } from "../utils/date";
@@ -62,21 +62,36 @@ function processTypeLabel(value?: string) {
   return value ?? "-";
 }
 
+function hasAssessmentValue(item?: AssessmentMap[string]) {
+  return Boolean(
+    item?.conformity_rate
+    || item?.comment?.trim()
+    || item?.proof?.trim()
+    || item?.proofFile
+  );
+}
+
 function AuditExecutionPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { data: assignment, loading, refetch: refetchAssignment } = useFetch<Assignment>(`/audit-assignments/${id}/`, [id]);
   const { data: clauses, loading: clausesLoading } = useFetch<Clause[]>("/iso-clauses/");
   const { data: currentAssessments } = useFetch<Assessment[]>(id ? `/audit-criterion-assessments/?assignment=${id}` : "/audit-criterion-assessments/?assignment=0", [id]);
   const { data: latestAssessments } = useFetch<Assessment[]>(
     assignment?.process ? `/audit-criterion-assessments/?latest_for_process=${assignment.process}` : "/audit-criterion-assessments/?assignment=0",
-    [assignment?.process]
+    [assignment?.process],
   );
   const { data: computedResults, refetch: refetchComputedResults } = useFetch<ComputedResult[]>("/audit-computed-results/");
   const { mutate, loading: saving, error } = useMutation();
   const [values, setValues] = useState<AssessmentMap>({});
   const [done, setDone] = useState(false);
+  const [activeClauseIndex, setActiveClauseIndex] = useState(0);
+  const [launchPrepared, setLaunchPrepared] = useState(false);
   const saveTimeouts = useRef<Record<string, number>>({});
   const valuesRef = useRef<AssessmentMap>({});
+  const launchPreparationRef = useRef<string | null>(null);
+  const isAuditLaunch = searchParams.get("start") === "1";
+  const auditLocked = assignment?.status === "closed";
 
   const sortedClauses = useMemo(
     () => [...(clauses ?? [])].sort((a, b) => a.reference.localeCompare(b.reference, undefined, { numeric: true })),
@@ -99,45 +114,70 @@ function AuditExecutionPage() {
     () => auditClauses.flatMap((clause) => clause.criteria.map((criterion) => ({ ...criterion, clause: clause.reference }))),
     [auditClauses]
   );
+  const safeActiveClauseIndex = Math.min(activeClauseIndex, Math.max(auditClauses.length - 1, 0));
+  const activeClause = auditClauses[safeActiveClauseIndex];
+  const currentAssessmentByCriterion = useMemo(() => {
+    const lookup = new Map<number, Assessment>();
+    (currentAssessments ?? []).forEach((assessment) => lookup.set(assessment.criterion, assessment));
+    return lookup;
+  }, [currentAssessments]);
 
   const computedResult = (computedResults ?? []).find((item) => String(item.assignment) === String(id));
-  const filledCriteriaCount = allCriteria.filter((criterion) => {
-    const item = values[String(criterion.id)];
-    return item?.conformity_rate || item?.comment || item?.proof || item?.proofFile;
-  }).length;
+  const filledCriteriaCount = allCriteria.filter((criterion) => hasAssessmentValue(values[String(criterion.id)])).length;
+
+  useEffect(() => {
+    setLaunchPrepared(false);
+    launchPreparationRef.current = null;
+    setActiveClauseIndex(0);
+    setValues({});
+  }, [id]);
 
   useEffect(() => {
     valuesRef.current = values;
   }, [values]);
 
   useEffect(() => {
-    if (currentAssessments?.length) {
-      const nextValues: AssessmentMap = {};
-      currentAssessments.forEach((item) => {
-        nextValues[String(item.criterion)] = {
-          conformity_rate: normalizeRate(item.conformity_rate),
-          comment: item.comment ?? "",
-          proof: item.proofs?.[0]?.description ?? "",
-        };
-      });
-      setValues((prev) => (Object.keys(prev).length ? { ...nextValues, ...prev } : nextValues));
+    if (!currentAssessments) return;
+
+    const sourceAssessments = currentAssessments.length ? currentAssessments : (latestAssessments ?? []);
+    if (!sourceAssessments.length) {
+      setValues((prev) => (Object.keys(prev).length ? prev : {}));
       return;
     }
 
-    if (!latestAssessments?.length) return;
     const nextValues: AssessmentMap = {};
-    latestAssessments.forEach((item) => {
+    sourceAssessments.forEach((item) => {
       nextValues[String(item.criterion)] = {
         conformity_rate: normalizeRate(item.conformity_rate),
         comment: item.comment ?? "",
         proof: item.proofs?.[0]?.description ?? "",
       };
     });
-    setValues((prev) => (Object.keys(prev).length ? prev : nextValues));
-  }, [latestAssessments, currentAssessments]);
+    setValues((prev) => (currentAssessments.length || !Object.keys(prev).length ? nextValues : prev));
+  }, [currentAssessments, latestAssessments]);
+
+  useEffect(() => {
+    setActiveClauseIndex((current) => Math.min(current, Math.max(auditClauses.length - 1, 0)));
+  }, [auditClauses.length]);
+
+  useEffect(() => {
+    if (!id || !isAuditLaunch || !assignment || launchPrepared) return;
+    if (assignment.status !== "assigned" || launchPreparationRef.current === id) return;
+    launchPreparationRef.current = id;
+
+    const prepareLaunch = async () => {
+      await mutate("patch", `/audit-assignments/${id}/`, { status: "in_progress" });
+      setLaunchPrepared(true);
+      refetchAssignment();
+    };
+
+    prepareLaunch().catch(() => {
+      launchPreparationRef.current = null;
+    });
+  }, [assignment, id, isAuditLaunch, launchPrepared]);
 
   const persistCriterion = async (criterionId: number, snapshot?: AssessmentMap[string]) => {
-    if (!id) return;
+    if (!id || auditLocked) return;
     const item = snapshot ?? values[String(criterionId)];
     if (!item) return;
 
@@ -168,6 +208,7 @@ function AuditExecutionPage() {
   };
 
   const scheduleSave = (criterionId: number, snapshot: AssessmentMap[string]) => {
+    if (auditLocked) return;
     const key = String(criterionId);
     if (saveTimeouts.current[key]) {
       window.clearTimeout(saveTimeouts.current[key]);
@@ -178,6 +219,7 @@ function AuditExecutionPage() {
   };
 
   const updateValue = (criterionId: number, field: "conformity_rate" | "comment" | "proof", value: string) => {
+    if (auditLocked) return;
     setValues((prev) => {
       const nextFieldValue = field === "conformity_rate" ? sanitizeRateInput(value) : value;
       const nextItem = {
@@ -196,6 +238,7 @@ function AuditExecutionPage() {
   };
 
   const updateProofFile = (criterionId: number, file: File | null) => {
+    if (auditLocked) return;
     setValues((prev) => {
       const nextItem = {
         conformity_rate: prev[String(criterionId)]?.conformity_rate ?? "",
@@ -227,7 +270,7 @@ function AuditExecutionPage() {
       window.removeEventListener("beforeunload", flushPending);
       flushPending();
     };
-  }, [allCriteria]);
+  }, [allCriteria, auditLocked]);
 
   const finishAudit = async () => {
     if (!id) return;
@@ -241,6 +284,11 @@ function AuditExecutionPage() {
     refetchComputedResults();
     setDone(true);
   };
+
+  const clauseProgress = (clause: Clause) => ({
+    total: clause.criteria.length,
+    filled: clause.criteria.filter((criterion) => hasAssessmentValue(values[String(criterion.id)])).length,
+  });
 
   return (
     <div className="dashboard-stack">
@@ -291,72 +339,119 @@ function AuditExecutionPage() {
         <div className="card muted">Aucun critère n'est taggé pour ce type de processus.</div>
       )}
 
-      {auditClauses.map((clause) => (
-        <div key={clause.id} className="card fiche-section audit-criterion-card">
-          <h3 className="section-title">{clause.reference} — {clause.title}</h3>
-          <div className="fiche-grid audit-criteria-grid">
-            {clause.criteria.map((criterion) => (
-              <div key={criterion.id} className="fiche-item fiche-item-block audit-criterion-item">
-                <div className="audit-criterion-top">
-                  <div>
-                    <div className="fiche-label">{criterion.code}</div>
-                    <div className="fiche-text audit-criterion-title">{criterion.title}</div>
-                  </div>
-                  <span className="audit-rate-chip">
-                    {values[String(criterion.id)]?.conformity_rate || "-"}%
-                  </span>
-                </div>
-                <div className="audit-input-stack">
-                  <label className="audit-field">
-                    <span className="fiche-label">Taux de conformité</span>
-                    <span className="audit-rate-control">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={values[String(criterion.id)]?.conformity_rate ?? ""}
-                        onChange={(e) => updateValue(criterion.id, "conformity_rate", e.target.value)}
-                        className="form-control audit-rate-input"
-                      />
-                      <span>%</span>
+      {!loading && !clausesLoading && assignment && activeClause && (
+        <div className="audit-workbench">
+          <aside className="audit-clause-nav">
+            <div className="audit-clause-nav-title">Clauses ISO</div>
+            <div className="audit-clause-nav-list">
+              {auditClauses.map((clause, index) => {
+                const progress = clauseProgress(clause);
+                const progressState = progress.filled === 0 ? "empty" : progress.filled === progress.total ? "complete" : "partial";
+                return (
+                  <button
+                    key={clause.id}
+                    type="button"
+                    className={`audit-clause-nav-button ${index === safeActiveClauseIndex ? "active" : ""}`}
+                    onClick={() => setActiveClauseIndex(index)}
+                  >
+                    <span>{clause.reference}</span>
+                    <small>{clause.title}</small>
+                    <strong className={`audit-clause-state ${progressState}`}>{progress.filled}/{progress.total}</strong>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <section className="audit-clause-editor">
+            <div className="audit-clause-head">
+              <div>
+                <div className="eyebrow">Clause {activeClause.reference}</div>
+                <h3 className="section-title">{activeClause.title}</h3>
+              </div>
+              <div className="audit-clause-progress">
+                <span>Clause {safeActiveClauseIndex + 1}/{auditClauses.length}</span>
+                <strong>{clauseProgress(activeClause).filled}/{clauseProgress(activeClause).total}</strong>
+              </div>
+            </div>
+
+            <div className="audit-criteria-grid">
+              {activeClause.criteria.map((criterion) => (
+                <div key={criterion.id} className="fiche-item fiche-item-block audit-criterion-item">
+                  <div className="audit-criterion-top">
+                    <div>
+                      <div className="fiche-label">{criterion.code}</div>
+                      <div className="fiche-text audit-criterion-title">{criterion.title}</div>
+                    </div>
+                    <span className="audit-rate-chip">
+                      {values[String(criterion.id)]?.conformity_rate || "-"}%
                     </span>
-                  </label>
-                  <label className="audit-field">
-                    <span className="fiche-label">Commentaire</span>
-                    <textarea
-                      value={values[String(criterion.id)]?.comment ?? ""}
-                      onChange={(e) => updateValue(criterion.id, "comment", e.target.value)}
-                      className="form-control form-textarea audit-textarea"
-                    />
-                  </label>
-                  <label className="audit-field">
-                    <span className="fiche-label">Preuve constatée</span>
-                    <textarea
-                      value={values[String(criterion.id)]?.proof ?? ""}
-                      onChange={(e) => updateValue(criterion.id, "proof", e.target.value)}
-                      className="form-control form-textarea audit-textarea"
-                    />
-                  </label>
-                  <div className="audit-upload-field">
-                    <div className="fiche-label">Fichier de preuve</div>
-                    <label className="audit-upload-control" htmlFor={`proof-file-${criterion.id}`}>
-                      Choisir un fichier
+                  </div>
+                  <div className="audit-input-stack">
+                    <label className="audit-field">
+                      <span className="fiche-label">Taux de conformité</span>
+                      <span className="audit-rate-control">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={values[String(criterion.id)]?.conformity_rate ?? ""}
+                          onChange={(e) => updateValue(criterion.id, "conformity_rate", e.target.value)}
+                          className="form-control audit-rate-input"
+                          disabled={auditLocked}
+                        />
+                        <span>%</span>
+                      </span>
                     </label>
-                    <input
-                      id={`proof-file-${criterion.id}`}
-                      type="file"
-                      className="audit-file-input"
-                      onChange={(e) => updateProofFile(criterion.id, e.target.files?.[0] ?? null)}
-                    />
-                    <div className="audit-file-name">
-                      {values[String(criterion.id)]?.proofFile?.name ?? currentAssessments?.find((item) => item.criterion === criterion.id)?.proofs?.[0]?.title ?? "Aucun fichier sélectionné"}
+                    <label className="audit-field">
+                      <span className="fiche-label">Commentaire</span>
+                      <textarea
+                        value={values[String(criterion.id)]?.comment ?? ""}
+                        onChange={(e) => updateValue(criterion.id, "comment", e.target.value)}
+                        className="form-control form-textarea audit-textarea"
+                        disabled={auditLocked}
+                      />
+                    </label>
+                    <label className="audit-field">
+                      <span className="fiche-label">Preuve constatée</span>
+                      <textarea
+                        value={values[String(criterion.id)]?.proof ?? ""}
+                        onChange={(e) => updateValue(criterion.id, "proof", e.target.value)}
+                        className="form-control form-textarea audit-textarea"
+                        disabled={auditLocked}
+                      />
+                    </label>
+                    <div className="audit-upload-field">
+                      <div className="fiche-label">Fichier de preuve</div>
+                      <label className={`audit-upload-control ${auditLocked ? "disabled" : ""}`} htmlFor={`proof-file-${criterion.id}`}>
+                        Choisir un fichier
+                      </label>
+                      <input
+                        id={`proof-file-${criterion.id}`}
+                        type="file"
+                        className="audit-file-input"
+                        onChange={(e) => updateProofFile(criterion.id, e.target.files?.[0] ?? null)}
+                        disabled={auditLocked}
+                      />
+                      <div className="audit-file-name">
+                        {values[String(criterion.id)]?.proofFile?.name ?? currentAssessmentByCriterion.get(criterion.id)?.proofs?.[0]?.title ?? "Aucun fichier sélectionné"}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+
+            <div className="audit-clause-actions">
+              <button className="tag" type="button" disabled={safeActiveClauseIndex === 0} onClick={() => setActiveClauseIndex((index) => Math.max(index - 1, 0))}>
+                Précédent
+              </button>
+              <button className="tag" type="button" disabled={safeActiveClauseIndex >= auditClauses.length - 1} onClick={() => setActiveClauseIndex((index) => Math.min(index + 1, auditClauses.length - 1))}>
+                Suivant
+              </button>
+            </div>
+          </section>
         </div>
-      ))}
+      )}
 
       <div className="card audit-actions-card">
         <button className="btn-primary" onClick={finishAudit} disabled={saving || assignment?.status === "closed"}>

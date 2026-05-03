@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useFetch } from "../hooks/useFetch";
+import { useAuth } from "../context/AuthContext";
 import ActionForm from "../components/ActionForm";
 import ActionEditModal from "../components/ActionEditModal";
+import SortableHeader from "../components/SortableHeader";
+import { sortItems, SortConfig } from "../utils/tableSort";
 
 type Action = {
   id: number;
@@ -13,10 +17,21 @@ type Action = {
   completed: boolean;
 };
 
+const actionSortAccessors = {
+  title: (action: Action) => action.title,
+  process: (action: Action) => action.process_name ?? "",
+  assignee: (action: Action) => action.assignee_username ?? "",
+  status: (action: Action) => action.completed,
+};
+
 function ActionsPage() {
+  const { auth } = useAuth();
   const { data, loading, error, refetch } = useFetch<Action[]>("/actions/");
   const actions = data ?? [];
   const [editing, setEditing] = useState<Action | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig>(null);
+  const sortedActions = useMemo(() => sortItems(actions, sortConfig, actionSortAccessors), [actions, sortConfig]);
+  const canManageActions = auth.role === "admin" || auth.role === "auditeur_interne";
 
   return (
     <>
@@ -29,35 +44,40 @@ function ActionsPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Action</th>
-              <th>Processus</th>
-              <th>Assigné à</th>
-              <th>Description</th>
-              <th>Statut</th>
+              <SortableHeader label="Action" sortKey="title" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Processus" sortKey="process" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Assigné à" sortKey="assignee" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+              <SortableHeader label="Statut" sortKey="status" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {actions.map((a) => (
+            {sortedActions.map((a) => (
               <tr key={a.id}>
                 <td>{a.title}</td>
                 <td>{a.process_name ?? "-"}</td>
                 <td>{a.assignee_username ?? "-"}</td>
-                <td className="table-copy-cell">{a.body || "-"}</td>
                 <td>{a.completed ? "Clôturée" : "Ouverte"}</td>
                 <td className="table-actions">
-                  <button className="tag" onClick={() => setEditing(a)}>
-                    Éditer
-                  </button>
+                  <Link className="tag" to={`/actions/${a.id}`}>
+                    Consulter
+                  </Link>
+                  {canManageActions && (
+                    <button className="tag" onClick={() => setEditing(a)}>
+                      Éditer
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="card compact-form-card">
-        <ActionForm onSuccess={refetch} />
-      </div>
+      {canManageActions && (
+        <div className="card compact-form-card">
+          <ActionForm onSuccess={refetch} />
+        </div>
+      )}
       <ActionEditModal
         open={Boolean(editing)}
         action={editing}

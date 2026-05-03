@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
@@ -69,6 +69,40 @@ function collectMissingFields(value: SheetValue, path: string[] = []): string[] 
     return Object.entries(value).flatMap(([key, nested]) => collectMissingFields(nested, [...path, key]));
   }
   return isEmptyValue(value) ? [path.map(labelize).join(" / ")] : [];
+}
+
+function countCompletion(value: SheetValue): { total: number; filled: number } {
+  if (Array.isArray(value)) {
+    if (!value.length) return { total: 1, filled: 0 };
+    let total = 0;
+    let filled = 0;
+    value.forEach((item) => {
+      const next = countCompletion(item);
+      total += next.total;
+      filled += next.filled;
+    });
+    return { total, filled };
+  }
+  if (value && typeof value === "object") {
+    const children = Object.values(value);
+    if (!children.length) return { total: 1, filled: 0 };
+    let total = 0;
+    let filled = 0;
+    children.forEach((item) => {
+      const next = countCompletion(item);
+      total += next.total;
+      filled += next.filled;
+    });
+    return { total, filled };
+  }
+  return { total: 1, filled: isEmptyValue(value) ? 0 : 1 };
+}
+
+function completionState(value: SheetValue) {
+  const completion = countCompletion(value);
+  if (completion.filled === 0) return "empty";
+  if (completion.filled >= completion.total) return "complete";
+  return "partial";
 }
 
 function makeEmptyLike(value: SheetValue): SheetValue {
@@ -156,7 +190,7 @@ function SheetValueEditor({ fieldKey, value, onChange, level = 0 }: SheetValueEd
   if (value && typeof value === "object") {
     return (
       <div className={level === 0 ? "sheet-editor-group" : "sheet-editor-subgroup"}>
-        <div className="fiche-label">{label}</div>
+        {level > 0 && <div className="fiche-label sheet-editor-group-title">{label}</div>}
         <div className="sheet-editor-grid">
           {sortSheetEntries(Object.entries(value)).map(([key, nested]) => (
             <SheetValueEditor
@@ -207,18 +241,40 @@ function SheetValueEditor({ fieldKey, value, onChange, level = 0 }: SheetValueEd
 
 function ProcessSheetDetailPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { auth } = useAuth();
   const { data, loading, error, refetch } = useFetch<ProcessSheet>(`/managed-process-sheets/${id}/`, [id]);
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SheetData>({});
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [activeSectionIndex, setActiveSectionIndex] = useState(0);
+  const canEdit = auth.role === "gestionnaire" && Boolean(data);
+  const isCreationLaunch = searchParams.get("start") === "1";
 
   useEffect(() => {
     if (data?.sheet_data) {
       setDraft(normalizeSheetData(data.sheet_data));
+      setActiveSectionIndex(0);
+      if (auth.role === "gestionnaire" && (data.status === "draft" || isCreationLaunch)) {
+        setEditing(true);
+      }
     }
-  }, [data]);
+  }, [data, auth.role, isCreationLaunch]);
+
+  const sheetEntries = useMemo(
+    () => data?.sheet_data ? sortSheetEntries(Object.entries(data.sheet_data)) : [],
+    [data?.sheet_data],
+  );
+  const draftEntries = useMemo(() => sortSheetEntries(Object.entries(draft)), [draft]);
+  const editorEntries = draftEntries.length ? draftEntries : sheetEntries.map(([section, value]) => [section, normalizeValue(value)] as [string, SheetValue]);
+  const safeActiveSectionIndex = Math.min(activeSectionIndex, Math.max(editorEntries.length - 1, 0));
+  const activeSection = editorEntries[safeActiveSectionIndex];
+  const activeCompletion = activeSection ? countCompletion(activeSection[1]) : { total: 0, filled: 0 };
+
+  useEffect(() => {
+    setActiveSectionIndex((current) => Math.min(current, Math.max(editorEntries.length - 1, 0)));
+  }, [editorEntries.length]);
 
   const saveSheet = async (status: "draft" | "submitted") => {
     if (!data) return;
@@ -234,8 +290,18 @@ function ProcessSheetDetailPage() {
       sheet_data: draft,
       status,
     });
-    setEditing(false);
+    if (status === "submitted") {
+      setEditing(false);
+    }
     refetch();
+  };
+
+  const cancelEditing = () => {
+    if (data?.sheet_data) {
+      setDraft(normalizeSheetData(data.sheet_data));
+    }
+    setMissingFields([]);
+    setEditing(false);
   };
 
   return (
@@ -254,11 +320,13 @@ function ProcessSheetDetailPage() {
         </div>
       </section>
 
-      <div className="card fiche-meta-bar">
+      <div className="card fiche-meta-bar process-sheet-toolbar">
         <div><strong>Gestionnaire:</strong> {data?.manager_username ?? "-"}</div>
         <div><strong>Échéance:</strong> {formatDate(data?.due_date, "-")}</div>
-        {auth.role === "gestionnaire" && data && (
-          <button className="tag" onClick={() => setEditing((v) => !v)}>{editing ? "Annuler" : "Modifier la fiche"}</button>
+        {canEdit && (
+          <button className="tag" onClick={() => editing ? cancelEditing() : setEditing(true)}>
+            {editing ? "Annuler" : "Modifier la fiche"}
+          </button>
         )}
         <div><Link className="tag" to="/">Retour</Link></div>
       </div>
@@ -266,28 +334,70 @@ function ProcessSheetDetailPage() {
       {loading && <div className="card muted">Chargement...</div>}
       {error && <div className="card" style={{ color: "#b91c1c" }}>{error}</div>}
 
-      {data?.sheet_data && (
-        <div className="card">
-          {sortSheetEntries(Object.entries(data.sheet_data)).map(([section, value]) => (
-            <section key={section} className="fiche-section">
-              <h3 className="section-title">{labelize(section)}</h3>
-              {editing && auth.role === "gestionnaire" ? (
-                <SheetValueEditor
-                  fieldKey={section}
-                  value={draft[section] ?? normalizeValue(value)}
-                  onChange={(nextSection) => setDraft((prev) => ({ ...prev, [section]: nextSection }))}
-                />
-              ) : (
-                renderValue(value)
-              )}
-            </section>
-          ))}
-          {editing && auth.role === "gestionnaire" && (
-            <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-              <button className="btn-primary" onClick={() => saveSheet("draft")} disabled={saving}>Enregistrer</button>
-              <button className="btn-primary" onClick={() => saveSheet("submitted")} disabled={saving}>Soumettre la fiche</button>
+      {data?.sheet_data && (editing && canEdit ? (
+        <div className="process-sheet-workbench">
+          <aside className="process-sheet-nav">
+            <div className="process-sheet-nav-title">Sections</div>
+            <div className="process-sheet-nav-list">
+              {editorEntries.map(([section, value], index) => {
+                const completion = countCompletion(value);
+                const state = completionState(value);
+                return (
+                  <button
+                    key={section}
+                    type="button"
+                    className={`process-sheet-nav-button ${index === safeActiveSectionIndex ? "active" : ""}`}
+                    onClick={() => setActiveSectionIndex(index)}
+                  >
+                    <span>{labelize(section)}</span>
+                    <small className={`process-sheet-section-state ${state}`}>{completion.filled}/{completion.total}</small>
+                  </button>
+                );
+              })}
             </div>
-          )}
+          </aside>
+
+          <section className="card process-sheet-editor-card">
+            <div className="process-sheet-editor-head">
+              <div>
+                <div className="eyebrow">Création</div>
+                <h3 className="section-title">{activeSection ? labelize(activeSection[0]) : "Fiche processus"}</h3>
+              </div>
+              <div className="process-sheet-progress">
+                <span>Section {safeActiveSectionIndex + 1}/{editorEntries.length}</span>
+                <strong>{activeCompletion.filled}/{activeCompletion.total}</strong>
+              </div>
+            </div>
+
+            <div className="process-sheet-editor-body">
+              {activeSection && (
+                <SheetValueEditor
+                  fieldKey={activeSection[0]}
+                  value={activeSection[1]}
+                  onChange={(nextSection) => setDraft((prev) => ({ ...prev, [activeSection[0]]: nextSection }))}
+                />
+              )}
+            </div>
+
+            <div className="sheet-editor-actions">
+              <div className="sheet-editor-step-actions">
+                <button className="tag" type="button" disabled={safeActiveSectionIndex === 0} onClick={() => setActiveSectionIndex((index) => Math.max(index - 1, 0))}>
+                  Précédent
+                </button>
+                <button className="tag" type="button" disabled={safeActiveSectionIndex >= editorEntries.length - 1} onClick={() => setActiveSectionIndex((index) => Math.min(index + 1, editorEntries.length - 1))}>
+                  Suivant
+                </button>
+              </div>
+              <div className="sheet-editor-save-actions">
+                <button className="tag" type="button" onClick={cancelEditing} disabled={saving}>Annuler</button>
+                <button className="btn-primary" type="button" onClick={() => saveSheet("draft")} disabled={saving}>
+                  {saving ? "Enregistrement..." : "Enregistrer"}
+                </button>
+                <button className="btn-primary" type="button" onClick={() => saveSheet("submitted")} disabled={saving}>Soumettre la fiche</button>
+              </div>
+            </div>
+          </section>
+
           {missingFields.length > 0 && (
             <div className="sheet-validation-card">
               <strong>Champs obligatoires à compléter avant soumission</strong>
@@ -297,9 +407,18 @@ function ProcessSheetDetailPage() {
               {missingFields.length > 12 && <div>+ {missingFields.length - 12} autres champs.</div>}
             </div>
           )}
-          {saveError && <div style={{ color: "#b91c1c", marginTop: 12 }}>{saveError}</div>}
+          {saveError && <div className="sheet-save-error">{saveError}</div>}
         </div>
-      )}
+      ) : (
+        <div className="card">
+          {sheetEntries.map(([section, value]) => (
+            <section key={section} className="fiche-section">
+              <h3 className="section-title">{labelize(section)}</h3>
+              {renderValue(value)}
+            </section>
+          ))}
+        </div>
+      ))}
 
       {data?.process && (
         <div className="card">

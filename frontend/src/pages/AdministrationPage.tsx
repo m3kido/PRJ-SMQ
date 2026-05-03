@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useFetch } from "../hooks/useFetch";
 import { useMutation } from "../hooks/useMutation";
+import SortableHeader from "../components/SortableHeader";
+import { sortItems, SortConfig } from "../utils/tableSort";
 
 type UserItem = {
   id: number;
@@ -21,6 +23,17 @@ type DepartmentItem = {
   description: string;
 };
 
+const userSortAccessors = {
+  name: (item: UserItem) => item.first_name || item.username,
+  role: (item: UserItem) => item.role,
+  email: (item: UserItem) => item.email,
+};
+
+const departmentSortAccessors = {
+  name: (item: DepartmentItem) => item.name,
+  description: (item: DepartmentItem) => item.description,
+};
+
 function AdministrationPage() {
   const { data: users, refetch: refetchUsers } = useFetch<UserItem[]>("/users/");
   const { data: departments, refetch: refetchDepartments } = useFetch<DepartmentItem[]>("/departments/");
@@ -30,6 +43,10 @@ function AdministrationPage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [userForm, setUserForm] = useState({ username: "", email: "", first_name: "", last_name: "", password: "", role: "gestionnaire", department: "" });
   const [departmentForm, setDepartmentForm] = useState({ name: "", description: "" });
+  const [userSort, setUserSort] = useState<SortConfig>(null);
+  const [departmentSort, setDepartmentSort] = useState<SortConfig>(null);
+  const sortedUsers = useMemo(() => sortItems(users ?? [], userSort, userSortAccessors), [users, userSort]);
+  const sortedDepartments = useMemo(() => sortItems(departments ?? [], departmentSort, departmentSortAccessors), [departments, departmentSort]);
 
   const resetUserForm = () => {
     setEditingUserId(null);
@@ -122,15 +139,15 @@ function AdministrationPage() {
         <table className="table admin-table-tight" style={{ marginBottom: 12 }}>
           <thead>
             <tr>
-              <th>Nom</th>
-              <th>Rôle</th>
-              <th>Email</th>
+              <SortableHeader label="Nom" sortKey="name" sortConfig={userSort} onSort={(key, direction) => setUserSort({ key, direction })} />
+              <SortableHeader label="Rôle" sortKey="role" sortConfig={userSort} onSort={(key, direction) => setUserSort({ key, direction })} />
+              <SortableHeader label="Email" sortKey="email" sortConfig={userSort} onSort={(key, direction) => setUserSort({ key, direction })} />
               <th>Avatar</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {(users ?? []).map((user) => (
+            {sortedUsers.map((user) => (
               <tr key={user.id}>
                 <td>{user.first_name || user.username}</td>
                 <td>{user.role}</td>
@@ -187,13 +204,13 @@ function AdministrationPage() {
           <table className="table admin-table-tight" style={{ marginBottom: 12 }}>
             <thead>
               <tr>
-                <th>Nom</th>
-                <th>Description</th>
+                <SortableHeader label="Nom" sortKey="name" sortConfig={departmentSort} onSort={(key, direction) => setDepartmentSort({ key, direction })} />
+                <SortableHeader label="Description" sortKey="description" sortConfig={departmentSort} onSort={(key, direction) => setDepartmentSort({ key, direction })} />
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {(departments ?? []).map((department) => (
+              {sortedDepartments.map((department) => (
                 <tr key={department.id}>
                   <td>{department.name}</td>
                   <td>{department.description}</td>

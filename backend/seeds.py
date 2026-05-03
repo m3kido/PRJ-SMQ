@@ -21,6 +21,7 @@ from smq.models import (  # noqa: E402
     EvaluationScale,
     EvaluationScaleLevel,
 )
+from smq.process_sheet_utils import make_blank_sheet_data  # noqa: E402
 
 
 def main():
@@ -151,7 +152,7 @@ def main():
         due_date="2026-05-30",
         defaults={
             "status": "draft",
-            "sheet_data": template.structure,
+            "sheet_data": make_blank_sheet_data(template.structure),
         },
     )
 
