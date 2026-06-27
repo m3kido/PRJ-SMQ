@@ -6,7 +6,7 @@ import { useMutation } from "../hooks/useMutation";
 import { formatDate } from "../utils/date";
 import BpmnDiagram from "../components/BpmnDiagram";
 import { LoadingCard } from "../components/LoadingStates";
-import { labelizeSheetKey, sortSheetEntries } from "../utils/sheetLabels";
+import { isHiddenSheetSection, labelizeSheetKey, sortSheetEntries } from "../utils/sheetLabels";
 
 type SheetValue = string | number | boolean | null | SheetValue[] | { [key: string]: SheetValue };
 type SheetData = Record<string, SheetValue>;
@@ -40,7 +40,11 @@ function normalizeValue(value: unknown): SheetValue {
 }
 
 function normalizeSheetData(value: Record<string, unknown>): SheetData {
-  return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, normalizeValue(nested)]));
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !isHiddenSheetSection(key))
+      .map(([key, nested]) => [key, normalizeValue(nested)])
+  );
 }
 
 function labelize(value: string) {
@@ -57,19 +61,6 @@ function isEmptyValue(value: SheetValue): boolean {
   if (typeof value === "boolean") return false;
   if (typeof value === "number") return Number.isNaN(value);
   return String(value ?? "").trim() === "";
-}
-
-function collectMissingFields(value: SheetValue, path: string[] = []): string[] {
-  if (Array.isArray(value)) {
-    if (value.length === 0 || value.every(isEmptyValue)) {
-      return [path.map(labelize).join(" / ")];
-    }
-    return value.flatMap((item, index) => collectMissingFields(item, [...path, `${index + 1}`]));
-  }
-  if (value && typeof value === "object") {
-    return Object.entries(value).flatMap(([key, nested]) => collectMissingFields(nested, [...path, key]));
-  }
-  return isEmptyValue(value) ? [path.map(labelize).join(" / ")] : [];
 }
 
 function countCompletion(value: SheetValue): { total: number; filled: number } {
@@ -118,10 +109,25 @@ function makeEmptyLike(value: SheetValue): SheetValue {
 
 function renderValue(value: unknown) {
   if (Array.isArray(value)) {
+    if (!value.length) {
+      return <div className="fiche-text muted">-</div>;
+    }
+    if (value.some((item) => isRecord(item) || Array.isArray(item))) {
+      return (
+        <div className="sheet-read-list-grid">
+          {value.map((item, index) => (
+            <div key={index} className="fiche-item fiche-item-block sheet-read-list-card">
+              <div className="fiche-label">Élément {index + 1}</div>
+              <div className="fiche-content">{renderValue(item)}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
     return (
-      <ul className="fiche-list">
+      <ul className="fiche-list sheet-read-simple-list">
         {value.map((item, index) => (
-          <li key={index}>{isRecord(item) || Array.isArray(item) ? renderValue(item) : String(item)}</li>
+          <li key={index}>{String(item || "-")}</li>
         ))}
       </ul>
     );
@@ -140,7 +146,8 @@ function renderValue(value: unknown) {
     );
   }
 
-  return <div className="fiche-text">{String(value ?? "")}</div>;
+  const text = String(value ?? "").trim();
+  return <div className={`fiche-text ${text ? "" : "muted"}`}>{text || "-"}</div>;
 }
 
 type SheetValueEditorProps = {
@@ -248,7 +255,6 @@ function ProcessSheetDetailPage() {
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SheetData>({});
-  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [activeSectionIndex, setActiveSectionIndex] = useState(0);
   const canEdit = auth.role === "gestionnaire" && Boolean(data);
   const isCreationLaunch = searchParams.get("start") === "1";
@@ -272,6 +278,7 @@ function ProcessSheetDetailPage() {
   const safeActiveSectionIndex = Math.min(activeSectionIndex, Math.max(editorEntries.length - 1, 0));
   const activeSection = editorEntries[safeActiveSectionIndex];
   const activeCompletion = activeSection ? countCompletion(activeSection[1]) : { total: 0, filled: 0 };
+  const activeCompletionPercent = activeCompletion.total ? Math.round((activeCompletion.filled / activeCompletion.total) * 100) : 0;
 
   useEffect(() => {
     setActiveSectionIndex((current) => Math.min(current, Math.max(editorEntries.length - 1, 0)));
@@ -279,14 +286,6 @@ function ProcessSheetDetailPage() {
 
   const saveSheet = async (status: "draft" | "submitted") => {
     if (!data) return;
-    if (status === "submitted") {
-      const missing = collectMissingFields(draft);
-      if (missing.length) {
-        setMissingFields(missing);
-        return;
-      }
-    }
-    setMissingFields([]);
     await mutate("patch", `/managed-process-sheets/${data.id}/`, {
       sheet_data: draft,
       status,
@@ -301,7 +300,6 @@ function ProcessSheetDetailPage() {
     if (data?.sheet_data) {
       setDraft(normalizeSheetData(data.sheet_data));
     }
-    setMissingFields([]);
     setEditing(false);
   };
 
@@ -363,10 +361,16 @@ function ProcessSheetDetailPage() {
               <div>
                 <div className="eyebrow">Création</div>
                 <h3 className="section-title">{activeSection ? labelize(activeSection[0]) : "Fiche processus"}</h3>
+                <p className="process-sheet-section-copy">
+                  Remplissez ce que vous avez. La fiche peut être soumise même si certains champs restent vides.
+                </p>
               </div>
               <div className="process-sheet-progress">
                 <span>Section {safeActiveSectionIndex + 1}/{editorEntries.length}</span>
                 <strong>{activeCompletion.filled}/{activeCompletion.total}</strong>
+                <div className="process-sheet-progress-track" aria-hidden="true">
+                  <span style={{ width: `${activeCompletionPercent}%` }} />
+                </div>
               </div>
             </div>
 
@@ -399,25 +403,69 @@ function ProcessSheetDetailPage() {
             </div>
           </section>
 
-          {missingFields.length > 0 && (
-            <div className="sheet-validation-card">
-              <strong>Champs obligatoires à compléter avant soumission</strong>
-              <ul>
-                {missingFields.slice(0, 12).map((field) => <li key={field}>{field}</li>)}
-              </ul>
-              {missingFields.length > 12 && <div>+ {missingFields.length - 12} autres champs.</div>}
-            </div>
-          )}
           {saveError && <div className="sheet-save-error">{saveError}</div>}
         </div>
       ) : (
-        <div className="card">
-          {sheetEntries.map(([section, value]) => (
-            <section key={section} className="fiche-section">
-              <h3 className="section-title">{labelize(section)}</h3>
-              {renderValue(value)}
-            </section>
-          ))}
+        <div className="process-sheet-workbench">
+          <aside className="process-sheet-nav">
+            <div className="process-sheet-nav-title">Sections</div>
+            <div className="process-sheet-nav-list">
+              {sheetEntries.map(([section, value], index) => {
+                const completion = countCompletion(normalizeValue(value));
+                const state = completionState(normalizeValue(value));
+                return (
+                  <button
+                    key={section}
+                    type="button"
+                    className={`process-sheet-nav-button ${index === safeActiveSectionIndex ? "active" : ""}`}
+                    onClick={() => setActiveSectionIndex(index)}
+                  >
+                    <span>{labelize(section)}</span>
+                    <small className={`process-sheet-section-state ${state}`}>{completion.filled}/{completion.total}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <section className="card process-sheet-editor-card">
+            <div className="process-sheet-editor-head">
+              <div>
+                <div className="eyebrow">Fiche processus</div>
+                <h3 className="section-title">{activeSection ? labelize(activeSection[0]) : "Fiche processus"}</h3>
+                <p className="process-sheet-section-copy">
+                  Lecture par section pour garder la fiche lisible et exploitable pendant l'audit.
+                </p>
+              </div>
+              <div className="process-sheet-progress">
+                <span>Section {safeActiveSectionIndex + 1}/{sheetEntries.length}</span>
+                <strong>{activeCompletion.filled}/{activeCompletion.total}</strong>
+                <div className="process-sheet-progress-track" aria-hidden="true">
+                  <span style={{ width: `${activeCompletionPercent}%` }} />
+                </div>
+              </div>
+            </div>
+
+            <div className="process-sheet-editor-body">
+              {activeSection && renderValue(activeSection[1])}
+            </div>
+
+            <div className="sheet-editor-actions">
+              <div className="sheet-editor-step-actions">
+                <button className="tag" type="button" disabled={safeActiveSectionIndex === 0} onClick={() => setActiveSectionIndex((index) => Math.max(index - 1, 0))}>
+                  Précédent
+                </button>
+                <button className="tag" type="button" disabled={safeActiveSectionIndex >= sheetEntries.length - 1} onClick={() => setActiveSectionIndex((index) => Math.min(index + 1, sheetEntries.length - 1))}>
+                  Suivant
+                </button>
+              </div>
+              {canEdit && (
+                <button className="tag" type="button" onClick={() => setEditing(true)}>
+                  Modifier la fiche
+                </button>
+              )}
+            </div>
+          </section>
         </div>
       ))}
 

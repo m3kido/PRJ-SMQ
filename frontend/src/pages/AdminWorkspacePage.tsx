@@ -229,7 +229,7 @@ function AdminWorkspacePage() {
                 </div>
                 <div className="process-readiness-score">
                   <span>{item.rate == null ? "Non audité" : `${item.rate.toFixed(0)}%`}</span>
-                  <small>{item.level}</small>
+                  <small>{item.level} · score pondéré</small>
                 </div>
                 <div className="process-readiness-nc">
                   <span className={`badge ${item.ncCount ? "majeure" : "mineure"}`}>{item.ncCount} NC</span>

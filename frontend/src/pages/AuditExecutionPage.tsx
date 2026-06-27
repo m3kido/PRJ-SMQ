@@ -19,7 +19,7 @@ type Clause = {
   id: number;
   reference: string;
   title: string;
-  criteria: { id: number; code: string; title: string; process_types?: string[] }[];
+  criteria: { id: number; code: string; title: string; process_types?: string[]; weight?: string }[];
 };
 
 type AssessmentMap = Record<string, { conformity_rate: string; comment: string; proof: string; proofFile?: File | null }>;
@@ -324,7 +324,7 @@ function AuditExecutionPage() {
           <h3 className="section-title">Résultat calculé</h3>
           <div className="fiche-grid">
             <div className="fiche-item fiche-item-block">
-              <div className="fiche-label">Taux moyen</div>
+              <div className="fiche-label">Taux pondéré</div>
               <div className="fiche-text">{computedResult.average_rate}%</div>
             </div>
             <div className="fiche-item fiche-item-block">
@@ -383,6 +383,7 @@ function AuditExecutionPage() {
                     <div>
                       <div className="fiche-label">{criterion.code}</div>
                       <div className="fiche-text audit-criterion-title">{criterion.title}</div>
+                      <span className="criteria-weight-inline">Poids x{Number(criterion.weight ?? 1).toFixed(2)}</span>
                     </div>
                     <span className="audit-rate-chip">
                       {values[String(criterion.id)]?.conformity_rate || "-"}%

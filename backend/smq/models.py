@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.core.validators import MinValueValidator
+from decimal import Decimal
 
 
 User = get_user_model()
@@ -36,6 +38,25 @@ class Process(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return self.name
+
+
+class ProcessHistory(models.Model):
+    EVENT_CHOICES = [
+        ("created", "Créé"),
+        ("updated", "Mis à jour"),
+        ("sheet_updated", "Fiche mise à jour"),
+        ("bpmn_updated", "BPMN mis à jour"),
+        ("status_changed", "Statut modifié"),
+    ]
+
+    process = models.ForeignKey(Process, on_delete=models.CASCADE, related_name="history")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="process_history")
+    event_type = models.CharField(max_length=32, choices=EVENT_CHOICES, default="updated")
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
 
 
 class ProcessDocument(models.Model):
@@ -112,6 +133,24 @@ class CorrectiveAction(models.Model):
     evidence = models.FileField(upload_to="actions_evidence/", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class CorrectiveActionHistory(models.Model):
+    EVENT_CHOICES = [
+        ("created", "Créée"),
+        ("updated", "Mise à jour"),
+        ("completed", "Clôturée"),
+        ("reopened", "Rouverte"),
+    ]
+
+    action = models.ForeignKey(CorrectiveAction, on_delete=models.CASCADE, related_name="history")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="corrective_action_history")
+    event_type = models.CharField(max_length=24, choices=EVENT_CHOICES, default="updated")
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
 
 
 class Document(models.Model):
@@ -218,6 +257,12 @@ class IsoCriterion(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     process_types = models.JSONField(default=list, blank=True)
+    weight = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
     order = models.PositiveIntegerField(default=0)
 
     class Meta:

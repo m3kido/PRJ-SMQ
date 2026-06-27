@@ -30,13 +30,14 @@ const actionSortAccessors = {
 function ActionsPage() {
   const { auth } = useAuth();
   const { data, loading, error, refetch } = useFetch<Action[]>("/actions/");
-  const { mutate, error: deleteError } = useMutation();
+  const { mutate, error: actionError } = useMutation();
   const actions = data ?? [];
   const [editing, setEditing] = useState<Action | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const sortedActions = useMemo(() => sortItems(actions, sortConfig, actionSortAccessors), [actions, sortConfig]);
   const isAdmin = auth.role === "admin";
   const canManageActions = auth.role === "admin" || auth.role === "responsable_qualite" || auth.role === "auditeur_interne";
+  const canCloseActions = canManageActions || auth.role === "gestionnaire";
   const initialLoading = loading && !data;
   const paginatedActions = useShowMoreList(sortedActions, [sortConfig?.key, sortConfig?.direction, sortedActions.length]);
 
@@ -50,6 +51,11 @@ function ActionsPage() {
     refetch();
   };
 
+  const closeAction = async (action: Action) => {
+    await mutate("patch", `/actions/${action.id}/`, { completed: true });
+    refetch();
+  };
+
   return (
     <>
       <div className="card">
@@ -57,7 +63,7 @@ function ActionsPage() {
           <h3 className="section-title">Actions Correctives</h3>
         </div>
         {error && <div style={{ color: "#b91c1c" }}>{error}</div>}
-        {deleteError && <div style={{ color: "#b91c1c" }}>{deleteError}</div>}
+        {actionError && <div style={{ color: "#b91c1c" }}>{actionError}</div>}
         <table className="table">
           <thead>
             <tr>
@@ -81,6 +87,11 @@ function ActionsPage() {
                   <Link className="tag" to={`/actions/${a.id}`}>
                     Consulter
                   </Link>
+                  {canCloseActions && !a.completed && (
+                    <button className="tag" type="button" onClick={() => closeAction(a)}>
+                      Clôturer
+                    </button>
+                  )}
                   {canManageActions && (
                     <button className="tag" onClick={() => setEditing(a)}>
                       Éditer

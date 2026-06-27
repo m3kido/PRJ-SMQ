@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { useFetch } from "../hooks/useFetch";
+import { useMutation } from "../hooks/useMutation";
 import { formatDate } from "../utils/date";
 import SortableHeader from "../components/SortableHeader";
 import { TableLoadingRow } from "../components/LoadingStates";
@@ -71,7 +72,8 @@ function GestionnaireWorkspacePage() {
   const { data, loading: sheetsLoading } = useFetch<ManagedSheet[]>("/managed-process-sheets/");
   const { data: nonConformities, loading: nonConformitiesLoading } = useFetch<NonConformity[]>("/non-conformities/");
   const { data: audits, loading: auditsLoading } = useFetch<AuditAssignment[]>("/audit-assignments/");
-  const { data: correctiveActions, loading: correctiveActionsLoading } = useFetch<CorrectiveAction[]>("/actions/");
+  const { data: correctiveActions, loading: correctiveActionsLoading, refetch: refetchActions } = useFetch<CorrectiveAction[]>("/actions/");
+  const { mutate, error: actionError } = useMutation();
   const [processSort, setProcessSort] = useState<SortConfig>(null);
   const [ncSort, setNcSort] = useState<SortConfig>(null);
   const [auditSort, setAuditSort] = useState<SortConfig>(null);
@@ -92,6 +94,11 @@ function GestionnaireWorkspacePage() {
   const ncInitialLoading = nonConformitiesLoading && !nonConformities;
   const actionsInitialLoading = correctiveActionsLoading && !correctiveActions;
   const auditsInitialLoading = auditsLoading && !audits;
+
+  const closeAction = async (action: CorrectiveAction) => {
+    await mutate("patch", `/actions/${action.id}/`, { completed: true });
+    refetchActions();
+  };
 
   return (
     <div className="dashboard-stack">
@@ -187,6 +194,7 @@ function GestionnaireWorkspacePage() {
 
       <div className="card">
         <h3 className="section-title">Actions correctives de mes processus</h3>
+        {actionError && <div style={{ color: "#b91c1c", marginBottom: 12 }}>{actionError}</div>}
         <table className="table">
           <thead>
             <tr>
@@ -204,7 +212,16 @@ function GestionnaireWorkspacePage() {
                 <td>{item.title}</td>
                 <td>{item.process_name ?? "-"}</td>
                 <td>{item.completed ? "Clôturée" : "Ouverte"}</td>
-                <td><Link className="tag" to={`/actions/${item.id}`}>Consulter</Link></td>
+                <td>
+                  <div className="table-actions">
+                    <Link className="tag" to={`/actions/${item.id}`}>Consulter</Link>
+                    {!item.completed && (
+                      <button className="tag" type="button" onClick={() => closeAction(item)}>
+                        Clôturer
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
             {!actionsInitialLoading && sortedActions.length === 0 && (

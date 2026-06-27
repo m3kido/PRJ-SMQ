@@ -5,10 +5,12 @@ from django.utils import timezone
 from .models import (
     Department,
     Process,
+    ProcessHistory,
     ProcessDocument,
     Audit,
     NonConformity,
     CorrectiveAction,
+    CorrectiveActionHistory,
     Notification,
     Kpi,
     UserProfile,
@@ -41,10 +43,32 @@ class ProcessDocumentSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class ProcessHistorySerializer(serializers.ModelSerializer):
+    actor_username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProcessHistory
+        fields = ["id", "process", "actor", "actor_username", "event_type", "message", "created_at"]
+        read_only_fields = fields
+
+    def get_actor_username(self, obj):
+        return obj.actor.username if obj.actor_id else "Système"
+
+
 class ProcessSerializer(serializers.ModelSerializer):
     documents = ProcessDocumentSerializer(many=True, read_only=True)
     owner_username = serializers.CharField(source="owner.username", read_only=True)
     department_name = serializers.CharField(source="department.name", read_only=True)
+    history = serializers.SerializerMethodField()
+
+    def get_history(self, obj):
+        view = self.context.get("view")
+        if getattr(view, "action", None) != "retrieve":
+            return []
+        return ProcessHistorySerializer(
+            obj.history.select_related("actor").all(),
+            many=True,
+        ).data
 
     class Meta:
         model = Process
@@ -62,6 +86,7 @@ class ProcessSerializer(serializers.ModelSerializer):
             "updated_at",
             "created_at",
             "documents",
+            "history",
         ]
 
 
@@ -120,6 +145,18 @@ class NonConformitySerializer(serializers.ModelSerializer):
         return attrs
 
 
+class CorrectiveActionHistorySerializer(serializers.ModelSerializer):
+    actor_username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CorrectiveActionHistory
+        fields = ["id", "action", "actor", "actor_username", "event_type", "message", "created_at"]
+        read_only_fields = fields
+
+    def get_actor_username(self, obj):
+        return obj.actor.username if obj.actor_id else "Système"
+
+
 class CorrectiveActionSerializer(serializers.ModelSerializer):
     title = serializers.CharField(max_length=255, allow_blank=False)
     body = serializers.CharField(allow_blank=False)
@@ -127,6 +164,7 @@ class CorrectiveActionSerializer(serializers.ModelSerializer):
     assignee_username = serializers.SerializerMethodField()
     non_conformity_reference = serializers.SerializerMethodField()
     assignee = serializers.PrimaryKeyRelatedField(read_only=True)
+    history = CorrectiveActionHistorySerializer(many=True, read_only=True)
 
     class Meta:
         model = CorrectiveAction
@@ -140,9 +178,9 @@ class CorrectiveActionSerializer(serializers.ModelSerializer):
             "body",
             "assignee",
             "assignee_username",
-            "due_date",
             "completed",
             "evidence",
+            "history",
             "created_at",
             "updated_at",
         ]

@@ -114,23 +114,6 @@ def main():
                 "long_terme": [""],
             },
         },
-        "deroulement_et_modelisation": {
-            "taches_chronologiques": [
-                {"etape": "", "acteur": "", "entrees": "", "actions": "", "sorties": ""}
-            ],
-            "cartographie": {
-                "swimlanes_acteurs": "",
-                "evenements_timers": "",
-                "passerelles_decision": "",
-                "flux_messages": "",
-            },
-        },
-        "validation": {
-            "redacteur": "",
-            "verificateur": "",
-            "approbateur": "",
-            "assistant": "",
-        },
     }
     template_defaults = {
         "description": "Fiche processus structurée pour pilotage, audit et traçabilité ISO 9001.",

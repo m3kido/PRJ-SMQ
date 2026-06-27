@@ -30,7 +30,7 @@ type Assessment = {
 
 type Clause = {
   id: number;
-  criteria: { id: number; code: string; title: string }[];
+  criteria: { id: number; code: string; title: string; weight?: string }[];
 };
 
 type NonConformity = {
@@ -194,7 +194,7 @@ function AuditReportPage() {
           </div>
           <div className="report-kpi-grid">
             <div className="report-kpi-card primary">
-              <span>Taux moyen</span>
+              <span>Taux pondéré</span>
               <strong>{result?.average_rate ?? "0"}%</strong>
             </div>
             <div className="report-kpi-card">
@@ -259,6 +259,7 @@ function AuditReportPage() {
               <tr>
                 <th>Code</th>
                 <th>Critère</th>
+                <th>Poids</th>
                 <th>Taux</th>
                 <th>Commentaire</th>
               </tr>
@@ -270,6 +271,7 @@ function AuditReportPage() {
                   <tr key={assessment.id}>
                     <td>{criterion?.code ?? "-"}</td>
                     <td>{criterion?.title ?? "-"}</td>
+                    <td>x{Number(criterion?.weight ?? 1).toFixed(2)}</td>
                     <td><span className={`report-rate ${rateTone(assessment.conformity_rate, scaleLevels)}`}>{assessment.conformity_rate ?? "-"}%</span></td>
                     <td>{assessment.comment || "-"}</td>
                   </tr>

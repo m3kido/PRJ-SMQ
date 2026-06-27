@@ -69,16 +69,23 @@ const SHEET_ORDER = [
   "contexte_et_environnement",
   "informations_documentees",
   "dysfonctionnements_majeurs_connus",
+];
+
+const HIDDEN_SHEET_SECTIONS = new Set([
   "deroulement_et_modelisation",
   "validation",
-];
+]);
 
 export function labelizeSheetKey(value: string) {
   return SHEET_LABELS[value] ?? value.replace(/_/g, " ");
 }
 
+export function isHiddenSheetSection(value: string) {
+  return HIDDEN_SHEET_SECTIONS.has(value);
+}
+
 export function sortSheetEntries<T>(entries: [string, T][]) {
-  return [...entries].sort(([left], [right]) => {
+  return entries.filter(([key]) => !isHiddenSheetSection(key)).sort(([left], [right]) => {
     const leftIndex = SHEET_ORDER.indexOf(left);
     const rightIndex = SHEET_ORDER.indexOf(right);
     if (leftIndex !== -1 || rightIndex !== -1) {

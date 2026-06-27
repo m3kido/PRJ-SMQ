@@ -1,7 +1,9 @@
 import { Link, useParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import { useFetch } from "../hooks/useFetch";
+import { useMutation } from "../hooks/useMutation";
 import { LoadingCard } from "../components/LoadingStates";
-import { formatDate, formatDateTime } from "../utils/date";
+import { formatDateTime } from "../utils/date";
 
 type Action = {
   id: number;
@@ -11,9 +13,15 @@ type Action = {
   title: string;
   body: string;
   assignee_username?: string;
-  due_date?: string | null;
   completed: boolean;
   evidence?: string | null;
+  history?: {
+    id: number;
+    actor_username?: string;
+    event_type: string;
+    message: string;
+    created_at: string;
+  }[];
   created_at: string;
   updated_at: string;
 };
@@ -27,10 +35,26 @@ function fileUrl(value?: string | null) {
   return `${host}${value.startsWith("/") ? "" : "/"}${value}`;
 }
 
+function eventLabel(value: string) {
+  if (value === "created") return "Création";
+  if (value === "completed") return "Clôture";
+  if (value === "reopened") return "Réouverture";
+  return "Mise à jour";
+}
+
 function ActionDetailPage() {
   const { id } = useParams();
-  const { data: action, loading, error } = useFetch<Action>(`/actions/${id}/`, [id]);
+  const { auth } = useAuth();
+  const { data: action, loading, error, refetch } = useFetch<Action>(`/actions/${id}/`, [id]);
+  const { mutate, loading: saving, error: saveError } = useMutation();
   const evidenceUrl = fileUrl(action?.evidence);
+  const canClose = ["admin", "responsable_qualite", "auditeur_interne", "gestionnaire"].includes(auth.role ?? "");
+
+  const closeAction = async () => {
+    if (!action) return;
+    await mutate("patch", `/actions/${action.id}/`, { completed: true });
+    refetch();
+  };
 
   return (
     <div className="dashboard-stack">
@@ -43,11 +67,17 @@ function ActionDetailPage() {
         <div className="hero-kpi">
           <span className="hero-kpi-label">Statut</span>
           <strong>{action?.completed ? "Clôturée" : "Ouverte"}</strong>
+          {action && canClose && !action.completed && (
+            <button className="tag action-close-hero-button" type="button" onClick={closeAction} disabled={saving}>
+              {saving ? "Clôture..." : "Clôturer"}
+            </button>
+          )}
         </div>
       </section>
 
       {loading && !action && <LoadingCard title="Chargement de l'action" description="Récupération du détail complet..." />}
       {error && <div className="card" style={{ color: "#b91c1c" }}>{error}</div>}
+      {saveError && <div className="card" style={{ color: "#b91c1c" }}>{saveError}</div>}
 
       {action && (
         <>
@@ -63,10 +93,6 @@ function ActionDetailPage() {
             <div>
               <span className="fiche-label">Non-conformité</span>
               <strong>{action.non_conformity_reference || "-"}</strong>
-            </div>
-            <div>
-              <span className="fiche-label">Échéance</span>
-              <strong>{formatDate(action.due_date, "-")}</strong>
             </div>
           </div>
 
@@ -94,6 +120,33 @@ function ActionDetailPage() {
                 <Link className="tag" to={`/processes/${action.process}`}>Voir le processus</Link>
               </div>
             )}
+          </div>
+
+          <div className="card action-history-card">
+            <div className="history-section-head">
+              <div>
+                <div className="eyebrow">Journal</div>
+                <h3 className="section-title">Historique</h3>
+              </div>
+              <span className="tag">{action.history?.length ?? 0} événement(s)</span>
+            </div>
+            <div className="action-timeline">
+              {action.history?.length ? action.history.map((item) => (
+                <div key={item.id} className="action-timeline-item">
+                  <div className="action-timeline-dot" />
+                  <div className="action-timeline-content">
+                    <div className="action-timeline-head">
+                      <span className={`history-event-chip ${item.event_type}`}>{eventLabel(item.event_type)}</span>
+                      <time>{formatDateTime(item.created_at, "-")}</time>
+                    </div>
+                    <p>{item.message}</p>
+                    <div className="history-actor">Par {item.actor_username ?? "Système"}</div>
+                  </div>
+                </div>
+              )) : (
+                <div className="muted">Aucun historique disponible pour cette action.</div>
+              )}
+            </div>
           </div>
         </>
       )}

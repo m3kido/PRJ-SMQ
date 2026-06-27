@@ -15,6 +15,7 @@ type Criterion = {
   clause_reference?: string;
   clause_title?: string;
   process_types: string[];
+  weight: string;
 };
 
 type Clause = {
@@ -36,6 +37,7 @@ const criteriaSortAccessors = {
   title: (item: Criterion) => item.title,
   clause: (item: Criterion) => item.clause_reference ?? item.clause,
   tags: (item: Criterion) => (item.process_types ?? []).join(", "),
+  weight: (item: Criterion) => Number(item.weight ?? 1),
 };
 
 const labelForProcessType = (value: string) => processTypeOptions.find((option) => option.value === value)?.label ?? value;
@@ -46,7 +48,7 @@ function CriteriaManagementPage() {
   const { data: clauses, error: clausesError } = useFetch<Clause[]>("/iso-clauses/");
   const { mutate, loading, error } = useMutation();
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ code: "", title: "", clause: "", process_types: defaultProcessTypes });
+  const [form, setForm] = useState({ code: "", title: "", clause: "", process_types: defaultProcessTypes, weight: "1.00" });
   const [formError, setFormError] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: "code", direction: "asc" });
   const [query, setQuery] = useState("");
@@ -76,6 +78,11 @@ function CriteriaManagementPage() {
     option.value,
     (criteria ?? []).filter((criterion) => (criterion.process_types?.length ? criterion.process_types : defaultProcessTypes).includes(option.value)).length,
   ])), [criteria]);
+  const averageWeight = useMemo(() => {
+    if (!criteria?.length) return "1.00";
+    const total = criteria.reduce((sum, criterion) => sum + Number(criterion.weight ?? 1), 0);
+    return (total / criteria.length).toFixed(2);
+  }, [criteria]);
   const hasFilters = Boolean(query.trim() || clauseFilter || tagFilter !== "all");
   const initialLoading = criteriaLoading && !criteria;
   const canDelete = auth.role === "admin";
@@ -97,13 +104,14 @@ function CriteriaManagementPage() {
       title: criterion.title,
       clause: String(criterion.clause),
       process_types: criterion.process_types?.length ? criterion.process_types : defaultProcessTypes,
+      weight: String(criterion.weight ?? "1.00"),
     });
     setFormError(null);
   };
 
   const reset = () => {
     setEditingId(null);
-    setForm({ code: "", title: "", clause: "", process_types: defaultProcessTypes });
+    setForm({ code: "", title: "", clause: "", process_types: defaultProcessTypes, weight: "1.00" });
     setFormError(null);
   };
 
@@ -113,11 +121,17 @@ function CriteriaManagementPage() {
       setFormError("Sélectionnez au moins un tag de processus.");
       return;
     }
+    const weight = Number(form.weight);
+    if (!Number.isFinite(weight) || weight <= 0) {
+      setFormError("Le poids doit être supérieur à 0.");
+      return;
+    }
     const payload = {
       code: form.code,
       title: form.title,
       clause: Number(form.clause),
       process_types: form.process_types,
+      weight: weight.toFixed(2),
     };
     if (editingId) {
       await mutate("patch", `/iso-criteria/${editingId}/`, payload);
@@ -158,9 +172,9 @@ function CriteriaManagementPage() {
           <div className="muted">Articles ISO disponibles</div>
         </div>
         <div className="card stat-card stat-card-primary">
-          <div className="card-title">Résultat</div>
-          <div className="card-value">{sortedCriteria.length}</div>
-          <div className="muted">Critères affichés</div>
+          <div className="card-title">Poids moyen</div>
+          <div className="card-value">{averageWeight}</div>
+          <div className="muted">Impact moyen sur le scoring</div>
         </div>
       </div>
 
@@ -224,12 +238,13 @@ function CriteriaManagementPage() {
                 <SortableHeader label="Libellé" sortKey="title" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
                 <SortableHeader label="Clause" sortKey="clause" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
                 <SortableHeader label="Tags" sortKey="tags" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
+                <SortableHeader label="Poids" sortKey="weight" sortConfig={sortConfig} onSort={(key, direction) => setSortConfig({ key, direction })} />
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {initialLoading ? (
-                <TableLoadingRow colSpan={5} label="Chargement des critères..." />
+                <TableLoadingRow colSpan={6} label="Chargement des critères..." />
               ) : paginatedCriteria.visibleItems.map((criterion) => (
                 <tr key={criterion.id}>
                   <td><strong>{criterion.code}</strong></td>
@@ -245,6 +260,7 @@ function CriteriaManagementPage() {
                       ))}
                     </div>
                   </td>
+                  <td><span className="criteria-weight-pill">x{Number(criterion.weight ?? 1).toFixed(2)}</span></td>
                   <td>
                     <div className="table-actions">
                       <button className="tag" onClick={() => startEdit(criterion)}>Éditer</button>
@@ -255,7 +271,7 @@ function CriteriaManagementPage() {
               ))}
               {!initialLoading && sortedCriteria.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="muted criteria-empty-row">Aucun critère ne correspond aux filtres.</td>
+                  <td colSpan={6} className="muted criteria-empty-row">Aucun critère ne correspond aux filtres.</td>
                 </tr>
               )}
             </tbody>
@@ -291,6 +307,18 @@ function CriteriaManagementPage() {
                   <option key={clause.id} value={clause.id}>{clause.reference} — {clause.title}</option>
                 ))}
               </select>
+            </label>
+            <label className="field-stack">
+              <span className="fiche-label">Poids</span>
+              <input
+                required
+                className="form-control"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={form.weight}
+                onChange={(e) => setForm({ ...form, weight: e.target.value })}
+              />
             </label>
             <div className="criterion-tag-picker">
               <div className="criteria-tag-picker-head">

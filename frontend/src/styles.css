@@ -608,6 +608,26 @@ a {
   min-height: 118px;
 }
 
+.criteria-weight-pill,
+.criteria-weight-inline {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.criteria-weight-inline {
+  margin-top: 6px;
+  background: #f4fbf6;
+  border-color: #d5eadb;
+  color: var(--success);
+}
+
 .criteria-form-actions {
   justify-content: flex-start;
   flex-wrap: wrap;
@@ -677,8 +697,13 @@ a {
 }
 
 .hero-kpi strong {
+  display: block;
   font-size: 34px;
   color: var(--primary);
+}
+
+.action-close-hero-button {
+  margin-top: 10px;
 }
 
 .action-detail-meta {
@@ -707,6 +732,174 @@ a {
   color: var(--text);
   line-height: 1.7;
   white-space: pre-wrap;
+}
+
+.action-history-card {
+  display: grid;
+  gap: 16px;
+}
+
+.history-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-section-head .section-title {
+  margin-bottom: 0;
+}
+
+.action-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.action-timeline-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 14px;
+  position: relative;
+}
+
+.action-timeline-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 24px;
+  bottom: -12px;
+  width: 1px;
+  background: var(--border);
+}
+
+.action-timeline-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: var(--primary);
+  margin-top: 16px;
+  box-shadow: 0 0 0 4px var(--primary-soft);
+  z-index: 1;
+}
+
+.action-timeline-content {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 16px;
+}
+
+.action-timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.action-timeline-head time {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.history-event-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #dce8e3;
+  background: #eef4f2;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 9px;
+}
+
+.history-event-chip.created,
+.history-event-chip.completed {
+  background: #e7f3ea;
+  border-color: #cfe2d4;
+  color: var(--success);
+}
+
+.history-event-chip.bpmn_updated,
+.history-event-chip.sheet_updated,
+.history-event-chip.updated {
+  background: #fff8f4;
+  border-color: #ead2c6;
+  color: var(--primary);
+}
+
+.history-event-chip.status_changed,
+.history-event-chip.reopened {
+  background: #fef3c7;
+  border-color: #f5dda2;
+  color: #9a5b13;
+}
+
+.action-timeline-item p {
+  margin: 9px 0 7px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.history-change-summary {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 8px;
+}
+
+.history-change-title {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.history-change-summary ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-change-summary li {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fcfaf7;
+  padding: 9px 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.history-change-summary li:last-child:first-letter {
+  text-transform: uppercase;
+}
+
+.history-expand-button {
+  justify-self: start;
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.history-legacy-note {
+  justify-self: start;
+  color: var(--muted);
+  background: #fff8f4;
+  border: 1px solid #ead2c6;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.history-actor {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .admin-iso-dashboard {
@@ -989,7 +1182,7 @@ a {
 
 .fiche-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
   gap: 14px;
   min-width: 0;
 }
@@ -1025,7 +1218,7 @@ a {
   margin: 0;
   padding-left: 18px;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -1071,7 +1264,7 @@ a {
 .sheet-editor-group,
 .sheet-editor-subgroup {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .sheet-editor-group-title {
@@ -1079,16 +1272,16 @@ a {
 }
 
 .sheet-editor-subgroup {
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #fcfaf7;
+  border-radius: 14px;
+  background: #fffdf9;
 }
 
 .sheet-editor-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 14px;
 }
 
 .sheet-editor-field {
@@ -1107,7 +1300,7 @@ a {
 .sheet-editor-textarea {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
   color: var(--text);
   font: inherit;
@@ -1115,7 +1308,7 @@ a {
 }
 
 .sheet-editor-textarea {
-  min-height: 86px;
+  min-height: 106px;
   resize: vertical;
   line-height: 1.45;
 }
@@ -1129,10 +1322,27 @@ a {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
-  gap: 10px;
-  padding: 10px;
+  gap: 12px;
+  padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.sheet-read-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 12px;
+}
+
+.sheet-read-list-card {
+  background: #fff;
+}
+
+.sheet-read-simple-list li {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   background: #fff;
 }
 
@@ -1165,8 +1375,8 @@ a {
 
 .process-sheet-workbench {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 20px;
   align-items: start;
 }
 
@@ -1174,8 +1384,8 @@ a {
   position: sticky;
   top: 18px;
   display: grid;
-  gap: 10px;
-  padding: 14px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: #fcfaf7;
@@ -1188,13 +1398,13 @@ a {
 
 .process-sheet-nav-list {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .process-sheet-nav-button {
   width: 100%;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 12px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -1202,7 +1412,7 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 9px 10px;
+  padding: 10px 11px;
   text-align: left;
 }
 
@@ -1211,6 +1421,11 @@ a {
   background: #fff;
   color: var(--primary);
   font-weight: 700;
+}
+
+.process-sheet-nav-button span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .process-sheet-section-state {
@@ -1239,6 +1454,7 @@ a {
 .process-sheet-editor-card {
   padding: 0;
   overflow: hidden;
+  border-radius: 18px;
 }
 
 .process-sheet-editor-head,
@@ -1252,15 +1468,17 @@ a {
 
 .process-sheet-editor-head {
   border-bottom: 1px solid var(--border);
-  background: #fcfaf7;
+  background: linear-gradient(180deg, #fffdf9 0%, #fcfaf7 100%);
+  align-items: flex-start;
 }
 
 .process-sheet-progress {
   display: grid;
   justify-items: end;
-  gap: 3px;
+  gap: 6px;
   color: var(--muted);
   font-size: 12px;
+  min-width: 130px;
 }
 
 .process-sheet-progress strong {
@@ -1268,8 +1486,32 @@ a {
   font-size: 18px;
 }
 
+.process-sheet-progress-track {
+  width: 124px;
+  height: 7px;
+  border-radius: 999px;
+  background: #eee5dd;
+  overflow: hidden;
+}
+
+.process-sheet-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), var(--success));
+}
+
+.process-sheet-section-copy {
+  margin: 4px 0 0;
+  max-width: 620px;
+  color: var(--muted);
+  line-height: 1.45;
+  font-size: 14px;
+}
+
 .process-sheet-editor-body {
-  padding: 18px;
+  padding: 20px;
+  background: #fff;
 }
 
 .sheet-editor-actions {
@@ -2322,6 +2564,10 @@ a {
 
   .process-sheet-progress {
     justify-items: start;
+  }
+
+  .process-sheet-progress-track {
+    width: min(220px, 100%);
   }
 
   .sheet-editor-list-item {
